@@ -1,0 +1,14 @@
+node_modules/
+.npm-cache/
+.xdg-config/
+.xdg-data/
+.next/
+.open-next/
+.wrangler/
+out/
+dist/
+.dev.vars
+.env*
+!.dev.vars.example
+*.log
+*.tsbuildinfo
