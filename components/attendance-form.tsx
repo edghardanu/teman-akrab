@@ -64,7 +64,7 @@ export function AttendanceForm() {
     }
   };
 
-  return <div className="card w-full max-w-[760px] p-5 sm:p-8">
+  return <div className="card w-full p-5 sm:p-8">
       <div className="mb-6 flex items-center justify-center gap-3">
         <Image src="/gencar.jpeg" alt="Logo Generus Cengkareng" width={48} height={48} priority className="h-12 w-12 rounded-xl object-cover" />
         <span className="text-[15px] font-bold text-[#111827]">Generus Cengkareng</span>

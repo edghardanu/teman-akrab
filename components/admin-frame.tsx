@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowUpRight, CalendarDays, ChevronDown, CircleHelp, LayoutDashboard, LogOut, Menu, Settings2, UsersRound, X } from "lucide-react";
+import { CalendarDays, CircleHelp, LayoutDashboard, LogOut, Menu, Settings2, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -29,7 +29,6 @@ export function AdminFrame({ username, mustChangePassword, children }: { usernam
       return <Link key={href} href={href} onClick={() => setMobileOpen(false)} className={`flex h-11 items-center gap-3 rounded-xl px-3 text-[12px] font-semibold !text-white transition ${active ? "bg-white/12" : "hover:bg-white/7"}`}><Icon size={16} className={active ? "text-lime" : ""} />{label}{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-lime" />}</Link>;
     })}</nav></div>
     <div className="mt-auto p-5">
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4"><div className="flex items-center gap-2 text-[10px] font-bold text-lime"><Activity size={13} /> PENGAJIAN GABUNGAN</div><p className="mt-2 text-[10px] leading-5 text-white/55">Empat desa, satu ruang belajar dan silaturahmi.</p><Link href="/" target="_blank" className="mt-3 flex items-center gap-1 text-[10px] font-semibold !text-white hover:!text-white">Lihat halaman peserta <ArrowUpRight size={12} /></Link></div>
       <div className="mt-4 flex items-center gap-3 rounded-xl px-2 py-2"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-lime text-[11px] font-bold text-forest">{username.slice(0, 1).toUpperCase()}</div><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold text-white">{username}</p><p className="mt-1 text-[9px] text-white/45">{role}</p></div><button onClick={signOut} disabled={loggingOut} title="Keluar" className="text-white/50 transition hover:text-white">{loggingOut ? <span className="text-[10px]">...</span> : <LogOut size={16} />}</button></div>
     </div>
   </div>;
