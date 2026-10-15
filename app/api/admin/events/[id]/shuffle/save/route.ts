@@ -7,7 +7,7 @@ import { normalizePersonName } from "@/lib/name-normalization";
 import { attendances, eventGroupMembers, eventGroups } from "@/lib/schema";
 
 type Params = { params: Promise<{ id: string }> };
-type Payload = { overwrite?: boolean; groups?: { name?: string; attendanceIds?: number[] }[] };
+type Payload = { overwrite?: boolean; groups?: { name?: string; villageId?: number; attendanceIds?: number[] }[] };
 
 export async function POST(request: NextRequest, { params }: Params) {
   if (!sameOrigin(request)) return jsonError("Permintaan tidak valid.", 403);
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!Number.isInteger(eventId) || eventId < 1) return jsonError("Kegiatan tidak ditemukan.", 404);
   const payload = await request.json().catch(() => null) as Payload | null;
   const groupsPayload = payload?.groups;
-  if (!Array.isArray(groupsPayload) || !groupsPayload.length || groupsPayload.length > 100 || groupsPayload.some((group) => !group || !Array.isArray(group.attendanceIds) || (group.name !== undefined && (typeof group.name !== "string" || group.name.length > 80)))) return jsonError("Pratinjau pembagian tidak valid.");
+  if (!Array.isArray(groupsPayload) || !groupsPayload.length || groupsPayload.length > 100 || groupsPayload.some((group) => !group || !Number.isInteger(group.villageId) || !Array.isArray(group.attendanceIds) || !group.attendanceIds.length || (group.name !== undefined && (typeof group.name !== "string" || group.name.length > 80)))) return jsonError("Pratinjau pembagian per desa tidak valid.");
   const ids = groupsPayload.flatMap((group) => group.attendanceIds ?? []);
   if (!ids.length || ids.some((id) => !Number.isInteger(id)) || new Set(ids).size !== ids.length) return jsonError("Setiap peserta hanya boleh ditempatkan satu kali.");
   const groupNames = groupsPayload.map((group, index) => group.name?.trim() || `Kelompok ${index + 1}`);
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const db = getDb();
   const existing = await db.select({ id: eventGroups.id }).from(eventGroups).where(eq(eventGroups.eventId, eventId)).limit(1);
   if (existing.length && !payload?.overwrite) return jsonError("Pembagian sebelumnya sudah tersimpan. Konfirmasi untuk menggantinya.", 409);
-  const participants = await db.select({ id: attendances.id, fullName: attendances.fullName, gender: attendances.gender }).from(attendances).where(eq(attendances.eventId, eventId)).orderBy(asc(attendances.id));
+  const participants = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, gender: attendances.gender }).from(attendances).where(eq(attendances.eventId, eventId)).orderBy(asc(attendances.id));
   const seenNames = new Set<string>();
   const uniqueParticipants = participants.filter((person) => {
     const normalizedName = normalizePersonName(person.fullName);
@@ -35,12 +35,20 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
   const validIds = new Set(uniqueParticipants.map((person) => person.id));
   if (validIds.size !== ids.length || ids.some((id) => !validIds.has(id))) return jsonError("Daftar peserta berubah. Acak ulang sebelum menyimpan.", 409);
-  const sizes = groupsPayload.map((group) => group.attendanceIds!.length);
-  if (Math.max(...sizes) - Math.min(...sizes) > 1) return jsonError("Jumlah peserta antar kelompok harus berbeda maksimal satu orang.");
+  const personById = new Map(uniqueParticipants.map((person) => [person.id, person]));
+  for (const group of groupsPayload) {
+    if (group.attendanceIds!.some((id) => personById.get(id)?.villageId !== group.villageId)) return jsonError("Peserta dalam satu kelompok harus berasal dari desa yang sama.");
+  }
+  const groupsByVillage = new Map<number, typeof groupsPayload>();
+  for (const group of groupsPayload) groupsByVillage.set(group.villageId!, [...(groupsByVillage.get(group.villageId!) ?? []), group]);
   const genderById = new Map(uniqueParticipants.map((person) => [person.id, person.gender]));
-  for (const gender of ["male", "female"] as const) {
-    const counts = groupsPayload.map((group) => group.attendanceIds!.filter((id) => genderById.get(id) === gender).length);
-    if (Math.max(...counts) - Math.min(...counts) > 1) return jsonError("Jumlah peserta laki-laki dan perempuan per kelompok harus berbeda maksimal satu orang. Buat pratinjau ulang.");
+  for (const villageGroups of groupsByVillage.values()) {
+    const sizes = villageGroups.map((group) => group.attendanceIds!.length);
+    if (Math.max(...sizes) - Math.min(...sizes) > 1) return jsonError("Jumlah peserta antar kelompok pada desa yang sama harus berbeda maksimal satu orang.");
+    for (const gender of ["male", "female", "unknown"] as const) {
+      const counts = villageGroups.map((group) => group.attendanceIds!.filter((id) => genderById.get(id) === gender).length);
+      if (Math.max(...counts) - Math.min(...counts) > 1) return jsonError("Komposisi peserta per desa harus seimbang. Buat pratinjau ulang.");
+    }
   }
   await db.delete(eventGroups).where(eq(eventGroups.eventId, eventId));
   const createdGroups: { id: number }[] = [];

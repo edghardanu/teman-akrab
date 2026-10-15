@@ -9,7 +9,7 @@ import { normalizePersonName } from "@/lib/name-normalization";
 type Params = { params: Promise<{ id: string }> };
 type Gender = "male" | "female" | "unknown";
 type Person = { id: number; fullName: string; villageId: number; villageName: string; groupName: string; age: number; gender: Gender; occupation: string };
-type PreviewGroup = { name: string; members: Person[] };
+type PreviewGroup = { name: string; villageId: number | null; villageName: string | null; members: Omit<Person, "villageId">[] };
 
 function randomIndex(max: number) {
   if (max <= 1) return 0;
@@ -34,21 +34,26 @@ export async function GET(request: NextRequest, { params }: Params) {
   const eventId = Number((await params).id);
   if (!Number.isInteger(eventId) || eventId < 1) return jsonError("Kegiatan tidak ditemukan.", 404);
   const db = getDb();
-  const rows = await db.select({ groupId: eventGroups.id, name: eventGroups.name, attendanceId: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, villageName: villages.name, groupName: groups.name })
+  const rows = await db.select({ groupId: eventGroups.id, name: eventGroups.name, attendanceId: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name })
     .from(eventGroups).leftJoin(eventGroupMembers, eq(eventGroups.id, eventGroupMembers.eventGroupId)).leftJoin(attendances, eq(eventGroupMembers.attendanceId, attendances.id)).leftJoin(villages, eq(attendances.villageId, villages.id)).leftJoin(groups, eq(attendances.groupId, groups.id)).where(eq(eventGroups.eventId, eventId)).orderBy(asc(eventGroups.id), asc(attendances.fullName));
-  const result = new Map<number, { name: string; members: Omit<Person, "villageId">[] }>();
+  const result = new Map<number, { name: string; members: Omit<Person, "villageId">[]; villages: Map<number, string> }>();
   const seenNames = new Set<string>();
   let duplicateNameCount = 0;
   rows.forEach((row) => {
-    if (!result.has(row.groupId)) result.set(row.groupId, { name: row.name, members: [] });
+    if (!result.has(row.groupId)) result.set(row.groupId, { name: row.name, members: [], villages: new Map() });
     if (row.attendanceId && row.fullName) {
       const normalizedName = normalizePersonName(row.fullName);
       if (seenNames.has(normalizedName)) { duplicateNameCount++; return; }
       seenNames.add(normalizedName);
+      if (row.villageId && row.villageName) result.get(row.groupId)!.villages.set(row.villageId, row.villageName);
       result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
     }
   });
-  return NextResponse.json({ groups: [...result.values()], saved: result.size > 0, duplicateNameCount });
+  const savedGroups: PreviewGroup[] = [...result.values()].map(({ name, members, villages: groupVillages }) => {
+    const villageEntries = [...groupVillages.entries()];
+    return { name, members, villageId: villageEntries.length === 1 ? villageEntries[0][0] : null, villageName: villageEntries.length === 1 ? villageEntries[0][1] : villageEntries.length > 1 ? "Lintas desa" : null };
+  });
+  return NextResponse.json({ groups: savedGroups, saved: result.size > 0, duplicateNameCount });
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
   const eventId = Number((await params).id);
   if (!Number.isInteger(eventId) || eventId < 1) return jsonError("Kegiatan tidak ditemukan.", 404);
-  const payload = await request.json().catch(() => null) as { mode?: string; value?: number; balanceVillages?: boolean } | null;
+  const payload = await request.json().catch(() => null) as { mode?: string; value?: number } | null;
   if (!payload || !["count", "size"].includes(payload.mode ?? "") || !Number.isInteger(payload.value) || payload.value! < 1 || payload.value! > 100) return jsonError("Masukkan jumlah kelompok 1–100 atau anggota per kelompok 1–100.");
   const db = getDb();
   const registeredPeople = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation })
@@ -71,24 +76,35 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
   const duplicateNameCount = registeredPeople.length - people.length;
   const saved = await db.select({ id: eventGroups.id }).from(eventGroups).where(eq(eventGroups.eventId, eventId)).limit(1);
-  const groupCount = Math.max(1, Math.min(100, payload.mode === "count" ? payload.value! : Math.ceil(people.length / payload.value!)));
-  const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
-  const genderCounts = buckets.map(() => ({ male: 0, female: 0, unknown: 0 }));
-  const villageCounts = buckets.map(() => new Map<number, number>());
-  for (const gender of ["male", "female", "unknown"] as const) {
-    for (const person of shuffle(people.filter((entry) => entry.gender === gender))) {
-      const target = buckets.map((members, groupIndex) => ({
-        groupIndex,
-        sameGender: genderCounts[groupIndex][gender],
-        total: members.length,
-        sameVillage: villageCounts[groupIndex].get(person.villageId) ?? 0,
-      })).sort((a, b) => a.sameGender - b.sameGender || a.total - b.total ||
-        (payload.balanceVillages ? a.sameVillage - b.sameVillage : 0) || a.groupIndex - b.groupIndex)[0].groupIndex;
-      buckets[target].push(person);
-      genderCounts[target][gender]++;
-      villageCounts[target].set(person.villageId, (villageCounts[target].get(person.villageId) ?? 0) + 1);
-    }
+  const peopleByVillage = new Map<number, { name: string; members: Person[] }>();
+  for (const person of people) {
+    const village = peopleByVillage.get(person.villageId) ?? { name: person.villageName, members: [] };
+    village.members.push(person);
+    peopleByVillage.set(person.villageId, village);
   }
-  const groupsPreview: PreviewGroup[] = buckets.map((members, index) => ({ name: `Kelompok ${index + 1}`, members: shuffle(members) }));
-  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, duplicateNameCount, saved: saved.length > 0, balanceVillages: Boolean(payload.balanceVillages) });
+
+  const groupsPreview: PreviewGroup[] = [];
+  for (const [villageId, village] of [...peopleByVillage.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, "id"))) {
+    if (payload.mode === "count" && payload.value! > village.members.length) return jsonError(`Desa ${village.name} memiliki ${village.members.length} peserta. Kurangi jumlah kelompok per desa.`);
+    const groupCount = payload.mode === "count" ? payload.value! : Math.ceil(village.members.length / payload.value!);
+    if (groupsPreview.length + groupCount > 100) return jsonError("Pembagian per desa menghasilkan lebih dari 100 kelompok. Kurangi jumlah kelompok atau tambah anggota per kelompok.");
+    const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
+    const genderCounts = buckets.map(() => ({ male: 0, female: 0, unknown: 0 }));
+    for (const gender of ["male", "female", "unknown"] as const) {
+      for (const person of shuffle(village.members.filter((entry) => entry.gender === gender))) {
+        const target = buckets.map((members, groupIndex) => ({
+          groupIndex,
+          sameGender: genderCounts[groupIndex][gender],
+          total: members.length,
+        })).sort((a, b) => a.sameGender - b.sameGender || a.total - b.total || a.groupIndex - b.groupIndex)[0].groupIndex;
+        buckets[target].push(person);
+        genderCounts[target][gender]++;
+      }
+    }
+    groupsPreview.push(...buckets.map((members, index) => {
+      const groupNumber = groupsPreview.length + index + 1;
+      return { name: `${village.name.slice(0, 64).trimEnd()} · Kelompok ${groupNumber}`, villageId, villageName: village.name, members: shuffle(members) };
+    }));
+  }
+  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, duplicateNameCount, saved: saved.length > 0, grouping: "village" });
 }
