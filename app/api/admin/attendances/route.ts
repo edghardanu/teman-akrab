@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   const total = totalRow?.value ?? 0;
   const orderColumn = sortBy === "fullName" ? attendances.fullName : sortBy === "age" ? attendances.age : attendances.createdAt;
   const ordered = sortDirection === "asc" ? asc(orderColumn) : desc(orderColumn);
-  const rows = await db.select({ id: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, createdAt: attendances.createdAt, villageName: villages.name, groupName: groups.name })
+  const rows = await db.select({ id: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, createdAt: attendances.createdAt, villageId: attendances.villageId, groupId: attendances.groupId, villageName: villages.name, groupName: groups.name })
     .from(attendances).innerJoin(villages, eq(attendances.villageId, villages.id)).innerJoin(groups, eq(attendances.groupId, groups.id))
     .where(where).orderBy(ordered, asc(attendances.fullName)).limit(pageSize).offset((page - 1) * pageSize);
   return NextResponse.json({ attendances: rows, total, page, pages: Math.ceil(total / pageSize) });

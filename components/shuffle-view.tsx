@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, LoaderCircle, Prin
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { safeJson } from "@/components/api-json";
+import { normalizePersonName } from "@/lib/name-normalization";
 
 type Gender = "male" | "female" | "unknown";
 type Member = { id: number; fullName: string; age: number; gender: Gender; occupation: string; villageName: string; groupName: string };
@@ -48,6 +49,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [warning, setWarning] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -62,11 +64,12 @@ export function ShuffleView({ eventId }: { eventId: number }) {
         return;
       }
       const [groupData, statsData] = await Promise.all([
-        safeJson<{ groups?: Team[]; saved?: boolean }>(groupResponse),
+        safeJson<{ groups?: Team[]; saved?: boolean; duplicateNameCount?: number }>(groupResponse),
         safeJson<{ event?: EventData | null }>(statsResponse),
       ]);
       setSavedGroups(groupData.groups ?? []);
       setIsSaved(Boolean(groupData.saved));
+      setWarning(groupData.duplicateNameCount ? `Pembagian tersimpan memiliki ${groupData.duplicateNameCount} entri nama duplikat. Nama yang sama hanya ditampilkan satu kali; buat pratinjau baru untuk menyimpan pembagian yang bersih.` : "");
       setEvent(statsData.event ?? null);
     } catch {
       setError("Data kegiatan belum dapat dimuat.");
@@ -84,6 +87,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
   const createPreview = async () => {
     setError("");
     setMessage("");
+    setWarning("");
     if (isSaved && !window.confirm("Hasil saat ini sudah tersimpan. Buat pratinjau baru? Hasil lama tetap ada sampai Anda menyimpan pengganti.")) return;
     setBusy(true);
     const response = await fetch(`/api/admin/events/${eventId}/shuffle`, {
@@ -91,14 +95,15 @@ export function ShuffleView({ eventId }: { eventId: number }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode, value: Number(value), balanceVillages: balance }),
     }).catch(() => null);
-    const data = await safeJson<{ error?: string; groups?: Team[]; participantCount?: number }>(response);
+    const data = await safeJson<{ error?: string; groups?: Team[]; participantCount?: number; duplicateNameCount?: number }>(response);
     setBusy(false);
     if (!response?.ok) {
       setError(data?.error ?? "Pembagian belum dapat dibuat.");
       return;
     }
     setPreview(data.groups ?? []);
-    setMessage(`${data.participantCount} peserta berhasil dibagi ke ${data.groups?.length ?? 0} kelompok. Periksa nama dan komposisi sebelum menyimpan.`);
+    setWarning(data.duplicateNameCount ? `${data.duplicateNameCount} entri dengan nama peserta duplikat tidak dimasukkan; setiap nama hanya dibagi satu kali.` : "");
+    setMessage(`${data.participantCount} peserta dengan nama unik dibagi ke ${data.groups?.length ?? 0} kelompok. Periksa nama dan komposisi sebelum menyimpan.`);
   };
 
   const renamePreviewGroup = (index: number, name: string) => {
@@ -108,6 +113,8 @@ export function ShuffleView({ eventId }: { eventId: number }) {
   const save = async () => {
     if (!preview.length) return;
     const groupsToSave = preview.map((group, index) => ({ ...group, name: group.name.trim() || `Kelompok ${index + 1}` }));
+    const groupNameKeys = groupsToSave.map((group) => normalizePersonName(group.name));
+    if (new Set(groupNameKeys).size !== groupNameKeys.length) { setError("Nama kelompok tidak boleh sama. Ubah nama yang duplikat sebelum menyimpan."); return; }
     let overwrite = false;
     if (isSaved) {
       if (!window.confirm("Simpan pratinjau ini dan timpa pembagian yang tersimpan sebelumnya?")) return;
@@ -129,6 +136,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
     setSavedGroups(groupsToSave);
     setPreview([]);
     setIsSaved(true);
+    setWarning("");
     setMessage("Pembagian berhasil disimpan dan terkunci.");
   };
 
@@ -147,6 +155,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
     setSavedGroups([]);
     setPreview([]);
     setIsSaved(false);
+    setWarning("");
     setMessage("Pembagian sebelumnya sudah direset. Buat pratinjau baru untuk membagi ulang peserta.");
   };
 
@@ -180,6 +189,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
     </div>
 
     {error && <div role="alert" className="mt-4 rounded-xl border border-[#f1d6ce] bg-[#fff6f2] px-4 py-3 text-[11px] text-[#a34f3b]">{error}</div>}
+    {warning && <div role="status" className="mt-4 rounded-xl border border-[#e9e2ce] bg-[#fcf8ec] px-4 py-3 text-[11px] text-[#887b59]">{warning}</div>}
     {message && <div role="status" className="mt-4 flex items-center gap-2 rounded-xl border border-[#dce6d1] bg-[#f0f4e8] px-4 py-3 text-[11px] text-forest"><Check size={14} />{message}</div>}
     {unknownCount > 0 && <div className="mt-4 rounded-xl border border-[#e9e2ce] bg-[#fcf8ec] px-4 py-3 text-[10px] leading-5 text-[#887b59]">{unknownCount} data lama belum memiliki jenis kelamin. Peserta tersebut tetap disebar merata sebagai kategori tersendiri.</div>}
 

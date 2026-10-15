@@ -4,6 +4,7 @@ import { jsonError } from "@/lib/api";
 import { requireAdmin, sameOrigin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { attendances, eventGroupMembers, eventGroups, groups, villages } from "@/lib/schema";
+import { normalizePersonName } from "@/lib/name-normalization";
 
 type Params = { params: Promise<{ id: string }> };
 type Gender = "male" | "female" | "unknown";
@@ -36,11 +37,18 @@ export async function GET(request: NextRequest, { params }: Params) {
   const rows = await db.select({ groupId: eventGroups.id, name: eventGroups.name, attendanceId: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, villageName: villages.name, groupName: groups.name })
     .from(eventGroups).leftJoin(eventGroupMembers, eq(eventGroups.id, eventGroupMembers.eventGroupId)).leftJoin(attendances, eq(eventGroupMembers.attendanceId, attendances.id)).leftJoin(villages, eq(attendances.villageId, villages.id)).leftJoin(groups, eq(attendances.groupId, groups.id)).where(eq(eventGroups.eventId, eventId)).orderBy(asc(eventGroups.id), asc(attendances.fullName));
   const result = new Map<number, { name: string; members: Omit<Person, "villageId">[] }>();
+  const seenNames = new Set<string>();
+  let duplicateNameCount = 0;
   rows.forEach((row) => {
     if (!result.has(row.groupId)) result.set(row.groupId, { name: row.name, members: [] });
-    if (row.attendanceId && row.fullName) result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
+    if (row.attendanceId && row.fullName) {
+      const normalizedName = normalizePersonName(row.fullName);
+      if (seenNames.has(normalizedName)) { duplicateNameCount++; return; }
+      seenNames.add(normalizedName);
+      result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
+    }
   });
-  return NextResponse.json({ groups: [...result.values()], saved: result.size > 0 });
+  return NextResponse.json({ groups: [...result.values()], saved: result.size > 0, duplicateNameCount });
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -51,9 +59,17 @@ export async function POST(request: NextRequest, { params }: Params) {
   const payload = await request.json().catch(() => null) as { mode?: string; value?: number; balanceVillages?: boolean } | null;
   if (!payload || !["count", "size"].includes(payload.mode ?? "") || !Number.isInteger(payload.value) || payload.value! < 1 || payload.value! > 100) return jsonError("Masukkan jumlah kelompok 1–100 atau anggota per kelompok 1–100.");
   const db = getDb();
-  const people = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation })
+  const registeredPeople = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation })
     .from(attendances).innerJoin(villages, eq(attendances.villageId, villages.id)).innerJoin(groups, eq(attendances.groupId, groups.id)).where(eq(attendances.eventId, eventId)).orderBy(asc(attendances.id));
-  if (!people.length) return jsonError("Belum ada peserta hadir untuk kegiatan ini.", 409);
+  if (!registeredPeople.length) return jsonError("Belum ada peserta hadir untuk kegiatan ini.", 409);
+  const seenNames = new Set<string>();
+  const people = registeredPeople.filter((person) => {
+    const normalizedName = normalizePersonName(person.fullName);
+    if (seenNames.has(normalizedName)) return false;
+    seenNames.add(normalizedName);
+    return true;
+  });
+  const duplicateNameCount = registeredPeople.length - people.length;
   const saved = await db.select({ id: eventGroups.id }).from(eventGroups).where(eq(eventGroups.eventId, eventId)).limit(1);
   const groupCount = Math.max(1, Math.min(100, payload.mode === "count" ? payload.value! : Math.ceil(people.length / payload.value!)));
   const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
@@ -74,5 +90,5 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   }
   const groupsPreview: PreviewGroup[] = buckets.map((members, index) => ({ name: `Kelompok ${index + 1}`, members: shuffle(members) }));
-  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, saved: saved.length > 0, balanceVillages: Boolean(payload.balanceVillages) });
+  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, duplicateNameCount, saved: saved.length > 0, balanceVillages: Boolean(payload.balanceVillages) });
 }
