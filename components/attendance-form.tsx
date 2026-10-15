@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Check, ChevronDown, Clock3, LoaderCircle, MapPin, UsersRound } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
@@ -11,12 +11,8 @@ import { safeJson } from "@/components/api-json";
 
 type FormValues = z.output<typeof attendanceSchema>;
 type FormInput = z.input<typeof attendanceSchema>;
-type EventData = { id: number; name: string; eventDate: string; eventTime: string; location: string; description?: string | null };
+type EventData = { id: number; name: string };
 type Option = { id: number; name: string };
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" }).format(new Date(`${value}T12:00:00+07:00`));
-}
 
 export function AttendanceForm() {
   const router = useRouter();
@@ -67,35 +63,9 @@ export function AttendanceForm() {
     }
   };
 
-  return <div className="grid items-start gap-8 lg:grid-cols-[.88fr_1.12fr] lg:gap-16">
-    <div className="pt-2 lg:pt-10">
-      <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#e5e8d8] bg-white/75 px-3 py-2 text-[10px] font-bold uppercase tracking-[.18em] text-forest"><span className="h-1.5 w-1.5 rounded-full bg-[#80a36a]" /> ruang silaturahmi jamaah</div>
-      <h1 className="max-w-[560px] text-[42px] font-bold leading-[1.04] tracking-[-.055em] text-ink sm:text-[56px] lg:text-[66px]">Satu niat,<br /><span className="font-normal italic text-forest">satu saf.</span></h1>
-      <p className="mt-5 max-w-[420px] text-[15px] leading-7 text-[#748079]">Mari berkumpul, belajar, dan menguatkan persaudaraan. Catat kehadiranmu untuk pengajian gabungan kali ini.</p>
-
-      <div className="relative mt-8 overflow-hidden rounded-[22px] bg-forest p-5 text-white sm:mt-10 sm:p-6">
-        <div className="absolute -right-7 -top-8 h-32 w-32 rounded-full border border-white/10" /><div className="absolute -right-1 top-0 h-20 w-20 rounded-full border border-white/10" />
-        <div className="relative flex items-center gap-2 text-[9px] font-bold uppercase tracking-[.2em] text-lime"><span className="h-1.5 w-1.5 rounded-full bg-lime" /> kegiatan berlangsung</div>
-        {loading ? <div className="relative mt-4 h-7 w-48 animate-pulse rounded bg-white/15" /> : event ? <>
-          <h2 className="relative mt-3 max-w-sm text-[21px] font-bold leading-tight tracking-[-.03em]">{event.name}</h2>
-          <div className="relative mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-white/75">
-            <span className="flex items-center gap-1.5"><Clock3 size={13} className="text-lime" />{formatDate(event.eventDate)} · {event.eventTime} WIB</span>
-            <span className="flex items-center gap-1.5"><MapPin size={13} className="text-lime" />{event.location}</span>
-          </div>
-        </> : <><h2 className="relative mt-3 text-[18px] font-bold">Belum ada kegiatan dibuka</h2><p className="relative mt-2 max-w-sm text-[12px] leading-5 text-white/65">Form absensi akan tersedia saat panitia membuka kegiatan berikutnya.</p></>}
-        {event?.description && <p className="relative mt-4 max-w-md border-t border-white/15 pt-3 text-xs leading-5 text-white/65">{event.description}</p>}
-      </div>
-
-      <div className="mt-6 flex items-center gap-3 rounded-[18px] border border-[#e8e7de] bg-white/60 p-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eaf0dc] text-forest"><UsersRound size={17} /></div>
-        <div className="min-w-0"><p className="text-[11px] font-bold">{villages.length ? villages.map((village) => village.name).join(" · ") : loading ? "Memuat data desa..." : "Belum ada desa aktif"}</p><p className="mt-1 text-[10px] text-[#90978f]">{villages.length} desa tersedia. Kelompok mengikuti desa yang dipilih.</p></div>
-      </div>
-    </div>
-
-    <div className="card relative overflow-hidden p-5 sm:p-8">
-      <div className="absolute right-0 top-0 h-24 w-24 rounded-bl-[70px] bg-[#f4f5ec]" />
-      <div className="relative mb-6 flex items-start justify-between gap-4">
-        <div><div className="text-[10px] font-bold uppercase tracking-[.18em] text-moss">formulir kehadiran</div><h2 className="mt-2 text-[22px] font-bold tracking-[-.035em]">Isi data diri</h2><p className="mt-1 text-[12px] text-[#8b938c]">Hanya butuh waktu sekitar satu menit.</p></div>
+  return <div className="card w-full max-w-[760px] p-5 sm:p-8">
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div><div className="text-[10px] font-bold uppercase tracking-[.18em] text-moss">formulir pendaftaran</div><h1 className="mt-2 text-[22px] font-bold tracking-[-.035em]">Isi data diri</h1></div>
         <span className="rounded-full bg-[#f1f3e9] px-3 py-1.5 text-[10px] font-semibold text-forest">{event ? "Pendaftaran dibuka" : "Pendaftaran ditutup"}</span>
       </div>
       {!event && !loading ? <div className="rounded-2xl border border-[#ede8d9] bg-[#fcfaf4] p-5 text-sm leading-6 text-[#717b73]">{submitError || "Belum ada kegiatan aktif. Silakan kembali setelah panitia membuka absensi."}</div> : <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-4" noValidate>
@@ -113,6 +83,5 @@ export function AttendanceForm() {
         <button className="btn-primary mt-2 w-full" type="submit" disabled={!event || isSubmitting || loading}>{isSubmitting ? <><LoaderCircle size={16} className="spin" /> Menyimpan kehadiran...</> : <>Kirim kehadiran <ArrowRight size={16} /></>}</button>
         <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-[10px] text-[#9ba098]"><Check size={12} className="text-moss" /> Data hanya digunakan untuk keperluan kegiatan ini.</p>
       </form>}
-    </div>
   </div>;
 }
