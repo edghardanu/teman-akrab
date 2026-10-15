@@ -18,10 +18,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return village ? NextResponse.json({ village }) : jsonError("Desa tidak ditemukan.", 404);
   }
   const parsed = villageSchema.safeParse(payload);
-  if (!parsed.success) return jsonError("Periksa nama desa.");
+  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Periksa nama desa.");
+  const db = getDb();
+  const [existingVillage] = await db.select({ id: villages.id }).from(villages).where(eq(villages.id, id)).limit(1);
+  if (!existingVillage) return jsonError("Desa tidak ditemukan.", 404);
+  if (parsed.data.groupNames.length) {
+    const existingGroups = await db.select({ name: groups.name }).from(groups).where(eq(groups.villageId, id));
+    const existingNames = new Set(existingGroups.map((group) => group.name.toLocaleLowerCase("id-ID")));
+    if (parsed.data.groupNames.some((name) => existingNames.has(name.toLocaleLowerCase("id-ID")))) {
+      return jsonError("Nama kelompok sudah terdaftar di desa ini.", 409);
+    }
+  }
   try {
-    const [village] = await getDb().update(villages).set({ name: parsed.data.name }).where(eq(villages.id, id)).returning();
-    return village ? NextResponse.json({ village }) : jsonError("Desa tidak ditemukan.", 404);
+    const [village] = await db.update(villages).set({ name: parsed.data.name }).where(eq(villages.id, id)).returning();
+    if (!village) return jsonError("Desa tidak ditemukan.", 404);
+    const createdGroups = parsed.data.groupNames.length
+      ? await db.insert(groups).values(parsed.data.groupNames.map((name) => ({ name, villageId: id }))).returning()
+      : [];
+    return NextResponse.json({ village, groups: createdGroups });
   } catch (error) {
     if (isUniqueError(error)) return jsonError("Nama desa tersebut sudah digunakan.", 409);
     throw error;

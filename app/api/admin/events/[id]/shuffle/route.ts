@@ -6,7 +6,8 @@ import { getDb } from "@/lib/db";
 import { attendances, eventGroupMembers, eventGroups, groups, villages } from "@/lib/schema";
 
 type Params = { params: Promise<{ id: string }> };
-type Person = { id: number; fullName: string; villageId: number; villageName: string; groupName: string; age: number; occupation: string };
+type Gender = "male" | "female" | "unknown";
+type Person = { id: number; fullName: string; villageId: number; villageName: string; groupName: string; age: number; gender: Gender; occupation: string };
 type PreviewGroup = { name: string; members: Person[] };
 
 function randomIndex(max: number) {
@@ -32,12 +33,12 @@ export async function GET(request: NextRequest, { params }: Params) {
   const eventId = Number((await params).id);
   if (!Number.isInteger(eventId) || eventId < 1) return jsonError("Kegiatan tidak ditemukan.", 404);
   const db = getDb();
-  const rows = await db.select({ groupId: eventGroups.id, name: eventGroups.name, attendanceId: attendances.id, fullName: attendances.fullName, age: attendances.age, occupation: attendances.occupation, villageName: villages.name, groupName: groups.name })
+  const rows = await db.select({ groupId: eventGroups.id, name: eventGroups.name, attendanceId: attendances.id, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, villageName: villages.name, groupName: groups.name })
     .from(eventGroups).leftJoin(eventGroupMembers, eq(eventGroups.id, eventGroupMembers.eventGroupId)).leftJoin(attendances, eq(eventGroupMembers.attendanceId, attendances.id)).leftJoin(villages, eq(attendances.villageId, villages.id)).leftJoin(groups, eq(attendances.groupId, groups.id)).where(eq(eventGroups.eventId, eventId)).orderBy(asc(eventGroups.id), asc(attendances.fullName));
   const result = new Map<number, { name: string; members: Omit<Person, "villageId">[] }>();
   rows.forEach((row) => {
     if (!result.has(row.groupId)) result.set(row.groupId, { name: row.name, members: [] });
-    if (row.attendanceId && row.fullName) result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
+    if (row.attendanceId && row.fullName) result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
   });
   return NextResponse.json({ groups: [...result.values()], saved: result.size > 0 });
 }
@@ -50,25 +51,28 @@ export async function POST(request: NextRequest, { params }: Params) {
   const payload = await request.json().catch(() => null) as { mode?: string; value?: number; balanceVillages?: boolean } | null;
   if (!payload || !["count", "size"].includes(payload.mode ?? "") || !Number.isInteger(payload.value) || payload.value! < 1 || payload.value! > 100) return jsonError("Masukkan jumlah kelompok 1–100 atau anggota per kelompok 1–100.");
   const db = getDb();
-  const people = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name, age: attendances.age, occupation: attendances.occupation })
+  const people = await db.select({ id: attendances.id, fullName: attendances.fullName, villageId: attendances.villageId, villageName: villages.name, groupName: groups.name, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation })
     .from(attendances).innerJoin(villages, eq(attendances.villageId, villages.id)).innerJoin(groups, eq(attendances.groupId, groups.id)).where(eq(attendances.eventId, eventId)).orderBy(asc(attendances.id));
   if (!people.length) return jsonError("Belum ada peserta hadir untuk kegiatan ini.", 409);
   const saved = await db.select({ id: eventGroups.id }).from(eventGroups).where(eq(eventGroups.eventId, eventId)).limit(1);
   const groupCount = Math.max(1, Math.min(100, payload.mode === "count" ? payload.value! : Math.ceil(people.length / payload.value!)));
   const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
-  if (payload.balanceVillages) {
-    const byVillage = new Map<number, Person[]>();
-    people.forEach((person) => byVillage.set(person.villageId, [...(byVillage.get(person.villageId) ?? []), person]));
-    for (const bucket of byVillage.values()) {
-      for (const person of shuffle(bucket)) {
-        const index = buckets.map((members, groupIndex) => ({ groupIndex, total: members.length, village: members.filter((member) => member.villageId === person.villageId).length }))
-          .sort((a, b) => a.total - b.total || a.village - b.village || a.groupIndex - b.groupIndex)[0].groupIndex;
-        buckets[index].push(person);
-      }
+  const genderCounts = buckets.map(() => ({ male: 0, female: 0, unknown: 0 }));
+  const villageCounts = buckets.map(() => new Map<number, number>());
+  for (const gender of ["male", "female", "unknown"] as const) {
+    for (const person of shuffle(people.filter((entry) => entry.gender === gender))) {
+      const target = buckets.map((members, groupIndex) => ({
+        groupIndex,
+        sameGender: genderCounts[groupIndex][gender],
+        total: members.length,
+        sameVillage: villageCounts[groupIndex].get(person.villageId) ?? 0,
+      })).sort((a, b) => a.sameGender - b.sameGender || a.total - b.total ||
+        (payload.balanceVillages ? a.sameVillage - b.sameVillage : 0) || a.groupIndex - b.groupIndex)[0].groupIndex;
+      buckets[target].push(person);
+      genderCounts[target][gender]++;
+      villageCounts[target].set(person.villageId, (villageCounts[target].get(person.villageId) ?? 0) + 1);
     }
-  } else {
-    shuffle(people).forEach((person, index) => buckets[index % groupCount].push(person));
   }
-  const groupsPreview: PreviewGroup[] = buckets.map((members, index) => ({ name: `Kelompok ${index + 1}`, members }));
+  const groupsPreview: PreviewGroup[] = buckets.map((members, index) => ({ name: `Kelompok ${index + 1}`, members: shuffle(members) }));
   return NextResponse.json({ groups: groupsPreview, participantCount: people.length, saved: saved.length > 0, balanceVillages: Boolean(payload.balanceVillages) });
 }

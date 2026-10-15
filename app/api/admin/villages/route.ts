@@ -19,10 +19,14 @@ export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return jsonError("Permintaan tidak valid.", 403);
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
   const parsed = villageSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return jsonError("Nama desa minimal 2 karakter.");
+  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Nama desa minimal 2 karakter.");
   try {
-    const [village] = await getDb().insert(villages).values({ name: parsed.data.name }).returning();
-    return NextResponse.json({ village }, { status: 201 });
+    const db = getDb();
+    const [village] = await db.insert(villages).values({ name: parsed.data.name }).returning();
+    const createdGroups = parsed.data.groupNames.length
+      ? await db.insert(groups).values(parsed.data.groupNames.map((name) => ({ name, villageId: village.id }))).returning()
+      : [];
+    return NextResponse.json({ village, groups: createdGroups }, { status: 201 });
   } catch (error) {
     if (isUniqueError(error)) return jsonError("Nama desa tersebut sudah digunakan.", 409);
     throw error;

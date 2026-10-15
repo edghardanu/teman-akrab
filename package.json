@@ -9,14 +9,12 @@
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "db:migrate:local": "wrangler d1 migrations apply absensi-pengajian --local",
-    "db:migrate:remote": "wrangler d1 migrations apply absensi-pengajian --remote",
-    "db:seed:local": "wrangler d1 execute absensi-pengajian --local --file=scripts/seed-villages.sql",
-    "db:seed-admin:local": "node scripts/seed-admin.mjs --local",
-    "db:seed-admin:remote": "node scripts/seed-admin.mjs --remote"
+    "db:migrate": "node --env-file=.env.local scripts/migrate-turso.mjs",
+    "db:seed-admin": "node --env-file=.env.local scripts/seed-admin.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@libsql/client": "^0.18.0",
     "@opennextjs/cloudflare": "1.20.9",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^0.468.0",

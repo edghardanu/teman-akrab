@@ -40,6 +40,7 @@ export const attendances = sqliteTable("attendances", {
   villageId: integer("village_id").notNull().references(() => villages.id),
   groupId: integer("group_id").notNull().references(() => groups.id),
   age: integer("age").notNull(),
+  gender: text("gender", { enum: ["male", "female", "unknown"] }).notNull().default("unknown"),
   occupation: text("occupation").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({

@@ -69,7 +69,7 @@ export function AttendanceForm() {
 
   return <div className="grid items-start gap-8 lg:grid-cols-[.88fr_1.12fr] lg:gap-16">
     <div className="pt-2 lg:pt-10">
-      <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#e5e8d8] bg-white/75 px-3 py-2 text-[10px] font-bold uppercase tracking-[.18em] text-forest"><span className="h-1.5 w-1.5 rounded-full bg-[#80a36a]" /> ruang silaturahmi empat desa</div>
+      <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#e5e8d8] bg-white/75 px-3 py-2 text-[10px] font-bold uppercase tracking-[.18em] text-forest"><span className="h-1.5 w-1.5 rounded-full bg-[#80a36a]" /> ruang silaturahmi jamaah</div>
       <h1 className="max-w-[560px] text-[42px] font-bold leading-[1.04] tracking-[-.055em] text-ink sm:text-[56px] lg:text-[66px]">Satu niat,<br /><span className="font-normal italic text-forest">satu saf.</span></h1>
       <p className="mt-5 max-w-[420px] text-[15px] leading-7 text-[#748079]">Mari berkumpul, belajar, dan menguatkan persaudaraan. Catat kehadiranmu untuk pengajian gabungan kali ini.</p>
 
@@ -88,7 +88,7 @@ export function AttendanceForm() {
 
       <div className="mt-6 flex items-center gap-3 rounded-[18px] border border-[#e8e7de] bg-white/60 p-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eaf0dc] text-forest"><UsersRound size={17} /></div>
-        <div><p className="text-[11px] font-bold">Bandara · Cengkareng · Kalideres · Cipondoh</p><p className="mt-1 text-[10px] text-[#90978f]">Empat desa, satu kebersamaan.</p></div>
+        <div className="min-w-0"><p className="text-[11px] font-bold">{villages.length ? villages.map((village) => village.name).join(" · ") : loading ? "Memuat data desa..." : "Belum ada desa aktif"}</p><p className="mt-1 text-[10px] text-[#90978f]">{villages.length} desa tersedia. Kelompok mengikuti desa yang dipilih.</p></div>
       </div>
     </div>
 
@@ -106,8 +106,9 @@ export function AttendanceForm() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div><label className="field-label" htmlFor="age">Umur <span className="field-hint">5–100 tahun</span></label><div className="relative"><input id="age" type="number" inputMode="numeric" min={5} max={100} placeholder="Contoh: 28" className="input-field pr-16" {...register("age")} /><span className="absolute right-4 top-[17px] text-[11px] text-[#97a097]">tahun</span></div>{errors.age && <p className="field-error">{errors.age.message}</p>}</div>
-          <div><label className="field-label" htmlFor="occupation">Pekerjaan</label><input id="occupation" maxLength={100} placeholder="Contoh: Ibu rumah tangga" className="input-field" {...register("occupation")} />{errors.occupation && <p className="field-error">{errors.occupation.message}</p>}</div>
+          <div><label className="field-label" htmlFor="gender">Jenis kelamin</label><div className="relative"><select id="gender" className="input-field appearance-none pr-10" defaultValue="" {...register("gender")}><option value="">Pilih jenis kelamin</option><option value="male">Laki-laki</option><option value="female">Perempuan</option></select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.gender && <p className="field-error">{errors.gender.message}</p>}</div>
         </div>
+        <div><label className="field-label" htmlFor="occupation">Pekerjaan</label><input id="occupation" maxLength={100} placeholder="Contoh: Ibu rumah tangga" className="input-field" {...register("occupation")} />{errors.occupation && <p className="field-error">{errors.occupation.message}</p>}</div>
         {submitError && <div role="alert" className="rounded-xl border border-[#f2d4ca] bg-[#fff7f4] px-4 py-3 text-[12px] leading-5 text-[#a5523e]">{submitError}</div>}
         <button className="btn-primary mt-2 w-full" type="submit" disabled={!event || isSubmitting || loading}>{isSubmitting ? <><LoaderCircle size={16} className="spin" /> Menyimpan kehadiran...</> : <>Kirim kehadiran <ArrowRight size={16} /></>}</button>
         <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-[10px] text-[#9ba098]"><Check size={12} className="text-moss" /> Data hanya digunakan untuk keperluan kegiatan ini.</p>
