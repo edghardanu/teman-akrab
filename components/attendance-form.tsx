@@ -69,9 +69,8 @@ export function AttendanceForm() {
         <Image src="/gencar.jpeg" alt="Logo Generus Cengkareng" width={48} height={48} priority className="h-12 w-12 rounded-xl object-cover" />
         <span className="text-[15px] font-bold text-[#111827]">Generus Cengkareng</span>
       </div>
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div><div className="text-sm font-bold tracking-normal text-forest">Absensi Kehadiran</div><h1 className="mt-2 text-[22px] font-bold tracking-[-.035em]">Isi data diri</h1></div>
-        <span className="rounded-full bg-[#f1f3e9] px-3 py-1.5 text-[10px] font-semibold text-forest">{event ? "Pendaftaran dibuka" : "Pendaftaran ditutup"}</span>
+      <div className="mb-6 text-center">
+        <h1 className="text-[22px] font-bold tracking-[-.035em]">Isi data kehadiran</h1>
       </div>
       {!event && !loading ? <div className="rounded-2xl border border-[#ede8d9] bg-[#fcfaf4] p-5 text-sm leading-6 text-[#717b73]">{submitError || "Belum ada kegiatan aktif. Silakan kembali setelah panitia membuka absensi."}</div> : <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-4" noValidate>
         <div><label className="field-label" htmlFor="fullName">Nama lengkap</label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" {...register("fullName")} />{errors.fullName && <p className="field-error">{errors.fullName.message}</p>}</div>
