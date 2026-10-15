@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Check, ChevronDown, LoaderCircle } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
@@ -64,12 +65,16 @@ export function AttendanceForm() {
   };
 
   return <div className="card w-full max-w-[760px] p-5 sm:p-8">
+      <div className="mb-6 flex items-center justify-center gap-3">
+        <Image src="/gencar.jpeg" alt="Logo Generus Cengkareng" width={48} height={48} priority className="h-12 w-12 rounded-xl object-cover" />
+        <span className="text-[15px] font-bold text-[#111827]">Generus Cengkareng</span>
+      </div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div><div className="text-[10px] font-bold uppercase tracking-[.18em] text-moss">formulir pendaftaran</div><h1 className="mt-2 text-[22px] font-bold tracking-[-.035em]">Isi data diri</h1></div>
         <span className="rounded-full bg-[#f1f3e9] px-3 py-1.5 text-[10px] font-semibold text-forest">{event ? "Pendaftaran dibuka" : "Pendaftaran ditutup"}</span>
       </div>
       {!event && !loading ? <div className="rounded-2xl border border-[#ede8d9] bg-[#fcfaf4] p-5 text-sm leading-6 text-[#717b73]">{submitError || "Belum ada kegiatan aktif. Silakan kembali setelah panitia membuka absensi."}</div> : <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-4" noValidate>
-        <div><label className="field-label" htmlFor="fullName">Nama lengkap <span className="field-hint">sesuai panggilan</span></label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" {...register("fullName")} />{errors.fullName && <p className="field-error">{errors.fullName.message}</p>}</div>
+        <div><label className="field-label" htmlFor="fullName">Nama lengkap</label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" {...register("fullName")} />{errors.fullName && <p className="field-error">{errors.fullName.message}</p>}</div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div><label className="field-label" htmlFor="villageId">Desa</label><div className="relative"><select id="villageId" className="input-field appearance-none pr-10" defaultValue="" {...register("villageId")}><option value="">Pilih desa</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.villageId && <p className="field-error">{errors.villageId.message}</p>}</div>
           <div><label className="field-label" htmlFor="groupId">Kelompok asal</label><div className="relative"><select id="groupId" className="input-field appearance-none pr-10" disabled={!selectedVillage || loadingGroups} defaultValue="" {...register("groupId")}><option value="">{!selectedVillage ? "Pilih desa dulu" : loadingGroups ? "Memuat kelompok..." : groups.length ? "Pilih kelompok" : "Belum ada kelompok"}</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.groupId && <p className="field-error">{errors.groupId.message}</p>}</div>
