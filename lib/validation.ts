@@ -16,6 +16,11 @@ export const eventSchema = z.object({
   location: z.string().trim().min(2).max(160),
   description: z.string().trim().max(500).optional().nullable(),
   status: z.enum(["draft", "active", "finished"]).default("draft"),
+  villageIds: z.array(z.coerce.number().int().positive()).min(1, "Pilih minimal satu desa yang mengikuti kegiatan.").max(100),
+}).superRefine((data, context) => {
+  if (new Set(data.villageIds).size !== data.villageIds.length) {
+    context.addIssue({ code: "custom", message: "Pilihan desa tidak boleh berulang.", path: ["villageIds"] });
+  }
 });
 
 export const villageSchema = z.object({

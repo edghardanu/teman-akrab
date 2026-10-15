@@ -10,6 +10,7 @@ const tableNames = [
   "admins",
   "events",
   "villages",
+  "event_villages",
   "groups",
   "attendances",
   "event_groups",
@@ -53,6 +54,10 @@ try {
   if (existsSync(sourcePath)) {
     source = createClient({ url: `file:${sourcePath.replaceAll("\\", "/")}` });
     for (const table of tableNames) {
+      if (table === "event_villages") {
+        const existing = await source.execute({ sql: "SELECT name FROM sqlite_master WHERE type = ? AND name = ?", args: ["table", table] });
+        if (!existing.rows.length) continue;
+      }
       const result = await source.execute(`SELECT * FROM "${table}"`);
       if (!result.rows.length) continue;
 
@@ -75,6 +80,12 @@ try {
     }
     console.log("Database SQLite lokal tidak ditemukan; data desa awal dimasukkan.");
   }
+
+  await target.execute(`INSERT OR IGNORE INTO event_villages (event_id, village_id)
+    SELECT events.id, villages.id
+    FROM events CROSS JOIN villages
+    WHERE villages.is_active = 1
+      AND NOT EXISTS (SELECT 1 FROM event_villages WHERE event_villages.event_id = events.id)`);
 
   const counts = [];
   for (const table of tableNames) {

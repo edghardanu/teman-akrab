@@ -26,6 +26,12 @@ export const villages = sqliteTable("villages", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });
 
+export const eventVillages = sqliteTable("event_villages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  eventId: integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  villageId: integer("village_id").notNull().references(() => villages.id),
+}, (table) => ({ eventVillageUnique: uniqueIndex("event_villages_unique").on(table.eventId, table.villageId), villageIdx: index("event_villages_village_idx").on(table.villageId) }));
+
 export const groups = sqliteTable("groups", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   villageId: integer("village_id").notNull().references(() => villages.id),

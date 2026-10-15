@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isUniqueError, jsonError } from "@/lib/api";
 import { requireAdmin, sameOrigin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { attendances, groups, villages } from "@/lib/schema";
+import { attendances, eventVillages, groups, villages } from "@/lib/schema";
 import { villageSchema } from "@/lib/validation";
 
 type Params = { params: Promise<{ id: string }> };
@@ -49,9 +49,10 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const db = getDb();
   const [groupCount] = await db.select({ value: count() }).from(groups).where(eq(groups.villageId, id));
   const [personCount] = await db.select({ value: count() }).from(attendances).where(eq(attendances.villageId, id));
-  if ((groupCount?.value ?? 0) || (personCount?.value ?? 0)) {
+  const [eventCount] = await db.select({ value: count() }).from(eventVillages).where(eq(eventVillages.villageId, id));
+  if ((groupCount?.value ?? 0) || (personCount?.value ?? 0) || (eventCount?.value ?? 0)) {
     await db.update(villages).set({ isActive: false }).where(eq(villages.id, id));
-    return NextResponse.json({ deactivated: true, message: "Desa memiliki kelompok atau riwayat absensi, jadi desa dinonaktifkan." });
+    return NextResponse.json({ deactivated: true, message: "Desa masih digunakan oleh kelompok, kegiatan, atau riwayat absensi, jadi desa dinonaktifkan." });
   }
   const [removed] = await db.delete(villages).where(eq(villages.id, id)).returning({ id: villages.id });
   return removed ? NextResponse.json({ success: true }) : jsonError("Desa tidak ditemukan.", 404);

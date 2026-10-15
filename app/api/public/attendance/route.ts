@@ -4,7 +4,7 @@ import { consumeRateLimit } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { isUniqueError, jsonError } from "@/lib/api";
 import { attendanceSchema } from "@/lib/validation";
-import { attendances, events, groups, villages } from "@/lib/schema";
+import { attendances, eventVillages, events, groups, villages } from "@/lib/schema";
 
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
   const db = getDb();
   const [event] = await db.select({ id: events.id }).from(events).where(eq(events.status, "active")).limit(1);
   if (!event) return jsonError("Pendaftaran untuk kegiatan ini sudah ditutup.", 409);
+  const [participatingVillage] = await db.select({ villageId: eventVillages.villageId }).from(eventVillages)
+    .where(and(eq(eventVillages.eventId, event.id), eq(eventVillages.villageId, parsed.data.villageId))).limit(1);
+  if (!participatingVillage) return jsonError("Desa ini tidak termasuk dalam kegiatan yang sedang dibuka.", 409);
   const [village] = await db.select({ id: villages.id }).from(villages).where(and(eq(villages.id, parsed.data.villageId), eq(villages.isActive, true))).limit(1);
   const [group] = await db.select({ id: groups.id, villageId: groups.villageId }).from(groups).where(and(eq(groups.id, parsed.data.groupId), eq(groups.isActive, true))).limit(1);
   if (!village || !group || group.villageId !== village.id) return jsonError("Desa dan kelompok yang dipilih tidak sesuai.");
