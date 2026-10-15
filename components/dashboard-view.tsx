@@ -24,6 +24,7 @@ export function DashboardView() {
   const [villageId, setVillageId] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [dateFilterReady, setDateFilterReady] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
@@ -36,6 +37,14 @@ export function DashboardView() {
   const [tableLoading, setTableLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    setFrom(today);
+    setTo(today);
+    setDateFilterReady(true);
+  }, []);
 
   const loadStats = useCallback(async () => {
     const params = new URLSearchParams();
@@ -70,9 +79,9 @@ export function DashboardView() {
     finally { setTableLoading(false); }
   }, [eventId, page, search, from, to, sort, direction]);
 
-  useEffect(() => { void loadStats(); const timer = window.setInterval(() => void loadStats(), 30_000); return () => window.clearInterval(timer); }, [loadStats]);
-  useEffect(() => { void loadPeople(); }, [loadPeople]);
-  useEffect(() => { const timer = window.setInterval(() => void loadPeople(), 30_000); return () => window.clearInterval(timer); }, [loadPeople]);
+  useEffect(() => { if (!dateFilterReady) return; void loadStats(); const timer = window.setInterval(() => void loadStats(), 30_000); return () => window.clearInterval(timer); }, [dateFilterReady, loadStats]);
+  useEffect(() => { if (dateFilterReady) void loadPeople(); }, [dateFilterReady, loadPeople]);
+  useEffect(() => { if (!dateFilterReady) return; const timer = window.setInterval(() => void loadPeople(), 30_000); return () => window.clearInterval(timer); }, [dateFilterReady, loadPeople]);
 
   const visibleGroups = useMemo(() => stats.groups.filter((group) => villageId === "all" || group.villageId === Number(villageId)), [stats.groups, villageId]);
   const exportUrl = useMemo(() => { const params = new URLSearchParams({ eventId }); if (from) params.set("from", from); if (to) params.set("to", to); return `/api/admin/attendances/export?${params}`; }, [eventId, from, to]);
