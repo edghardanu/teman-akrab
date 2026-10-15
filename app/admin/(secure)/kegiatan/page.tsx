@@ -1,5 +1,5 @@
-import { ManageView } from "@/components/manage-view";
+import { ManageViewClient } from "@/components/admin-view-client";
 
 export default function AdminManagePage() {
-  return <ManageView />;
+  return <ManageViewClient />;
 }

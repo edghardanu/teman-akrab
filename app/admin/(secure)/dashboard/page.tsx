@@ -1,5 +1,5 @@
-import { DashboardView } from "@/components/dashboard-view";
+import { DashboardViewClient } from "@/components/admin-view-client";
 
 export default function AdminDashboardPage() {
-  return <DashboardView />;
+  return <DashboardViewClient />;
 }
