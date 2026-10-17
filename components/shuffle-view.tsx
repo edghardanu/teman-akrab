@@ -102,7 +102,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
     }
     setPreview(data.groups ?? []);
     setWarning(data.duplicateNameCount ? `${data.duplicateNameCount} entri dengan nama peserta duplikat tidak dimasukkan; setiap nama hanya dibagi satu kali.` : "");
-    setMessage(`${data.participantCount} peserta dengan nama unik dibagi terpisah per desa ke ${data.groups?.length ?? 0} kelompok. Periksa nama dan komposisi sebelum menyimpan.`);
+    setMessage(`${data.participantCount} peserta dengan nama unik dari berbagai desa dan kelompok dicampur ke ${data.groups?.length ?? 0} kelompok. Komposisi laki-laki dan perempuan diseimbangkan. Periksa sebelum menyimpan.`);
   };
 
   const renamePreviewGroup = (index: number, name: string) => {
@@ -162,7 +162,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
     <div className="mb-5">
       <Link href="/admin/kegiatan" className="mb-4 inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#879188] hover:text-forest"><ArrowLeft size={13} /> Kembali ke kegiatan</Link>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><div className="mb-2 text-[10px] font-bold uppercase tracking-[.18em] text-moss">pembagian peserta</div><h1 className="text-[28px] font-bold tracking-[-.045em]">Kelompok kegiatan</h1><p className="mt-1.5 text-[12px] text-[#879088]">Atur pembagian kelompok untuk setiap desa peserta.</p></div>
+        <div><div className="mb-2 text-[10px] font-bold uppercase tracking-[.18em] text-moss">pembagian peserta</div><h1 className="text-[28px] font-bold tracking-[-.045em]">Kelompok kegiatan</h1><p className="mt-1.5 text-[12px] text-[#879088]">Campur peserta dari berbagai desa dan kelompok untuk kegiatan ini.</p></div>
         {event && <span className="rounded-xl border border-[#e4e6db] bg-white px-3 py-2 text-[10px] font-semibold text-[#65736a]">{event.name}</span>}
       </div>
     </div>
@@ -172,16 +172,16 @@ export function ShuffleView({ eventId }: { eventId: number }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="field-label" htmlFor="shuffleMode">Cara menentukan jumlah</label>
-            <div className="relative"><select id="shuffleMode" value={mode} onChange={(e) => setMode(e.target.value as "count" | "size")} className="input-field appearance-none pr-10"><option value="count">Jumlah kelompok per desa</option><option value="size">Anggota per kelompok per desa</option></select><ChevronDown size={14} className="pointer-events-none absolute right-4 top-[18px] text-[#859087]" /></div>
+            <div className="relative"><select id="shuffleMode" value={mode} onChange={(e) => setMode(e.target.value as "count" | "size")} className="input-field appearance-none pr-10"><option value="count">Jumlah kelompok kegiatan</option><option value="size">Anggota per kelompok</option></select><ChevronDown size={14} className="pointer-events-none absolute right-4 top-[18px] text-[#859087]" /></div>
           </div>
           <div>
-            <label className="field-label" htmlFor="shuffleValue">{mode === "count" ? "Jumlah kelompok untuk setiap desa" : "Anggota untuk setiap kelompok di tiap desa"}</label>
+            <label className="field-label" htmlFor="shuffleValue">{mode === "count" ? "Jumlah kelompok kegiatan" : "Anggota maksimal per kelompok"}</label>
             <input id="shuffleValue" type="number" inputMode="numeric" min={1} max={100} step={1} value={value} onChange={(e) => setValue(e.target.value)} className="input-field" />
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row xl:pb-0.5">{isSaved && <button onClick={resetSaved} disabled={busy || loading} className="btn-secondary min-h-[50px] w-full sm:w-auto">{busy ? <><LoaderCircle size={15} className="spin" /> Memproses...</> : <><RotateCcw size={15} /> Reset pembagian</>}</button>}<button onClick={createPreview} disabled={busy || loading || !value || Number(value) < 1 || Number(value) > 100} className="btn-primary min-h-[50px] w-full sm:w-auto">{busy ? <><LoaderCircle size={15} className="spin" /> Memproses...</> : <><Shuffle size={15} /> {isSaved ? "Acak ulang" : "Buat pembagian"}</>}</button></div>
       </div>
-      <p className="mt-4 border-t border-[#efefe8] pt-4 text-[10px] leading-5 text-[#929b92]">Peserta dari desa yang berbeda dibuatkan kelompok terpisah. Jumlah peserta laki-laki dan perempuan diseimbangkan pada kelompok di desa yang sama; selisih antar kelompok maksimal satu orang.</p>
+      <p className="mt-4 border-t border-[#efefe8] pt-4 text-[10px] leading-5 text-[#929b92]">Peserta dari berbagai desa dan kelompok asal dicampur dalam kelompok untuk kegiatan ini. Jumlah laki-laki dan perempuan diseimbangkan antar kelompok dengan selisih maksimal satu peserta per kategori.</p>
     </div>
 
     {error && <div role="alert" className="mt-4 rounded-xl border border-[#f1d6ce] bg-[#fff6f2] px-4 py-3 text-[11px] text-[#a34f3b]">{error}</div>}
@@ -198,7 +198,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
       {teams.map((team, index) => <section key={`${team.name}-${index}`} className="card overflow-hidden print:break-inside-avoid">
         <div className="border-b border-[#eeeee7] bg-[#fbfbf8] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1"><div className="text-[9px] font-bold uppercase tracking-[.12em] text-moss">{team.villageName ? `desa ${team.villageName}` : `kelompok kegiatan ${String(index + 1).padStart(2, "0")}`}</div>
+            <div className="min-w-0 flex-1"><div className="text-[9px] font-bold uppercase tracking-[.12em] text-moss">{team.villageName === "Lintas desa" ? "Lintas desa dan kelompok asal" : team.villageName ? `desa ${team.villageName}` : `kelompok kegiatan ${String(index + 1).padStart(2, "0")}`}</div>
               {preview.length ? <><label className="sr-only" htmlFor={`group-name-${index}`}>Nama kelompok {index + 1}</label><input id={`group-name-${index}`} value={team.name} maxLength={80} onChange={(e) => renamePreviewGroup(index, e.target.value)} className="mt-1 w-full rounded-lg border border-[#e4e6db] bg-white px-2 py-1 text-[13px] font-bold outline-none focus:border-moss print:hidden" /><h3 className="mt-1 hidden text-[14px] font-bold print:block">{team.name || `Kelompok ${index + 1}`}</h3></> : <h3 className="mt-1 text-[14px] font-bold">{team.name}</h3>}
             </div>
             <span className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[#eaf0e0] px-3 text-[10px] font-bold text-forest"><UsersRound size={13} />{team.members.length}</span>

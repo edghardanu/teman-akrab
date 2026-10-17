@@ -76,35 +76,31 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
   const duplicateNameCount = registeredPeople.length - people.length;
   const saved = await db.select({ id: eventGroups.id }).from(eventGroups).where(eq(eventGroups.eventId, eventId)).limit(1);
-  const peopleByVillage = new Map<number, { name: string; members: Person[] }>();
-  for (const person of people) {
-    const village = peopleByVillage.get(person.villageId) ?? { name: person.villageName, members: [] };
-    village.members.push(person);
-    peopleByVillage.set(person.villageId, village);
-  }
-
-  const groupsPreview: PreviewGroup[] = [];
-  for (const [villageId, village] of [...peopleByVillage.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name, "id"))) {
-    if (payload.mode === "count" && payload.value! > village.members.length) return jsonError(`Desa ${village.name} memiliki ${village.members.length} peserta. Kurangi jumlah kelompok per desa.`);
-    const groupCount = payload.mode === "count" ? payload.value! : Math.ceil(village.members.length / payload.value!);
-    if (groupsPreview.length + groupCount > 100) return jsonError("Pembagian per desa menghasilkan lebih dari 100 kelompok. Kurangi jumlah kelompok atau tambah anggota per kelompok.");
-    const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
-    const genderCounts = buckets.map(() => ({ male: 0, female: 0, unknown: 0 }));
-    for (const gender of ["male", "female", "unknown"] as const) {
-      for (const person of shuffle(village.members.filter((entry) => entry.gender === gender))) {
-        const target = buckets.map((members, groupIndex) => ({
-          groupIndex,
-          sameGender: genderCounts[groupIndex][gender],
-          total: members.length,
-        })).sort((a, b) => a.sameGender - b.sameGender || a.total - b.total || a.groupIndex - b.groupIndex)[0].groupIndex;
-        buckets[target].push(person);
-        genderCounts[target][gender]++;
-      }
+  if (payload.mode === "count" && payload.value! > people.length) return jsonError(`Jumlah peserta hanya ${people.length}. Kurangi jumlah kelompok.`);
+  const groupCount = payload.mode === "count" ? payload.value! : Math.ceil(people.length / payload.value!);
+  if (groupCount > 100) return jsonError("Pembagian menghasilkan lebih dari 100 kelompok. Tambah anggota per kelompok.");
+  const buckets: Person[][] = Array.from({ length: groupCount }, () => []);
+  const genderCounts = buckets.map(() => ({ male: 0, female: 0, unknown: 0 }));
+  for (const gender of ["male", "female", "unknown"] as const) {
+    for (const person of shuffle(people.filter((entry) => entry.gender === gender))) {
+      const candidates = buckets.map((members, groupIndex) => ({
+        groupIndex,
+        sameGender: genderCounts[groupIndex][gender],
+        total: members.length,
+      }));
+      const minimumGenderCount = Math.min(...candidates.map((candidate) => candidate.sameGender));
+      const minimumTotal = Math.min(...candidates.filter((candidate) => candidate.sameGender === minimumGenderCount).map((candidate) => candidate.total));
+      const tied = candidates.filter((candidate) => candidate.sameGender === minimumGenderCount && candidate.total === minimumTotal);
+      const target = tied[randomIndex(tied.length)].groupIndex;
+      buckets[target].push(person);
+      genderCounts[target][gender]++;
     }
-    groupsPreview.push(...buckets.map((members, index) => {
-      const groupNumber = groupsPreview.length + index + 1;
-      return { name: `${village.name.slice(0, 64).trimEnd()} · Kelompok ${groupNumber}`, villageId, villageName: village.name, members: shuffle(members) };
-    }));
   }
-  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, duplicateNameCount, saved: saved.length > 0, grouping: "village" });
+  const groupsPreview = buckets.map((members, index) => ({
+    name: `Kelompok ${index + 1}`,
+    villageId: null,
+    villageName: "Lintas desa",
+    members: shuffle(members),
+  }));
+  return NextResponse.json({ groups: groupsPreview, participantCount: people.length, duplicateNameCount, saved: saved.length > 0, grouping: "mixed" });
 }
