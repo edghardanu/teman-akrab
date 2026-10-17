@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { jsonError } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
   const params = request.nextUrl.searchParams;
   const eventId = Number(params.get("eventId"));
+  const locationFilter = params.get("location");
   const allEventsSelected = params.get("eventId") === "all";
   const from = params.get("from");
   const to = params.get("to");
@@ -27,7 +28,12 @@ export async function GET(request: NextRequest) {
   const allEvents = await db.select({ id: events.id, name: events.name, location: events.location, status: events.status, eventDate: events.eventDate, eventTime: events.eventTime }).from(events).orderBy(asc(events.eventDate));
   const selected = allEventsSelected ? undefined : Number.isInteger(eventId) && eventId > 0 ? eventId : allEvents.find((event) => event.status === "active")?.id ?? allEvents[0]?.id;
   const conditions = [];
-  if (selected) conditions.push(eq(attendances.eventId, selected));
+  if (locationFilter !== null) {
+    if (locationFilter !== "all") {
+      const matchingEventIds = allEvents.filter((event) => event.location === locationFilter).map((event) => event.id);
+      conditions.push(matchingEventIds.length ? inArray(attendances.eventId, matchingEventIds) : eq(attendances.eventId, -1));
+    }
+  } else if (selected) conditions.push(eq(attendances.eventId, selected));
   if (from) conditions.push(gte(attendances.createdAt, jakartaDateBound(from)));
   if (to) conditions.push(lte(attendances.createdAt, jakartaDateBound(to, true)));
   const where = conditions.length ? and(...conditions) : undefined;

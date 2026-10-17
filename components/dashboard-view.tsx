@@ -24,7 +24,7 @@ function localDateTimeValue(date: string) { return new Date(attendanceDate(date)
 
 export function DashboardView() {
   const [stats, setStats] = useState<Stats>(emptyStats);
-  const [eventId, setEventId] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
   const [villageId, setVillageId] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -60,7 +60,7 @@ export function DashboardView() {
 
   const loadStats = useCallback(async () => {
     const params = new URLSearchParams();
-    if (eventId) params.set("eventId", eventId);
+    params.set("location", locationFilter);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     try {
@@ -72,11 +72,11 @@ export function DashboardView() {
       setLastUpdated(new Date()); setError("");
     } catch (e) { setError(e instanceof Error ? e.message : "Data belum dapat dimuat."); }
     finally { setLoading(false); }
-  }, [eventId, from, to]);
+  }, [locationFilter, from, to]);
 
   const loadPeople = useCallback(async () => {
     setTableLoading(true);
-    const params = new URLSearchParams({ eventId, page: String(page), pageSize: "10", sort, direction });
+    const params = new URLSearchParams({ location: locationFilter, page: String(page), pageSize: "10", sort, direction });
     if (search) params.set("q", search);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -87,7 +87,7 @@ export function DashboardView() {
       setPeople(data.attendances ?? []); setTotal(data.total ?? 0); setPages(data.pages ?? 0);
     } catch { setPeople([]); }
     finally { setTableLoading(false); }
-  }, [eventId, page, search, from, to, sort, direction]);
+  }, [locationFilter, page, search, from, to, sort, direction]);
 
   useEffect(() => { if (!dateFilterReady) return; void loadStats(); const timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadStats(); }, 60_000); return () => window.clearInterval(timer); }, [dateFilterReady, loadStats]);
   useEffect(() => { if (dateFilterReady) void loadPeople(); }, [dateFilterReady, loadPeople]);
@@ -95,7 +95,8 @@ export function DashboardView() {
 
   const visibleGroups = useMemo(() => stats.groups.filter((group) => villageId === "all" || group.villageId === Number(villageId)), [stats.groups, villageId]);
   const visibleGroupTotal = useMemo(() => visibleGroups.reduce((sum, group) => sum + group.total, 0), [visibleGroups]);
-  const exportUrl = useMemo(() => { const params = new URLSearchParams({ eventId }); if (from) params.set("from", from); if (to) params.set("to", to); return `/api/admin/attendances/export?${params}`; }, [eventId, from, to]);
+  const locations = useMemo(() => [...new Set(stats.events.map((event) => event.location))].sort((a, b) => a.localeCompare(b, "id")), [stats.events]);
+  const exportUrl = useMemo(() => { const params = new URLSearchParams({ location: locationFilter }); if (from) params.set("from", from); if (to) params.set("to", to); return `/api/admin/attendances/export?${params}`; }, [locationFilter, from, to]);
   const changeSort = (column: string) => { if (sort === column) setDirection((value) => value === "asc" ? "desc" : "asc"); else { setSort(column); setDirection("asc"); } setPage(1); };
   const applySearch = (event: React.FormEvent) => { event.preventDefault(); setSearch(searchInput.trim()); setPage(1); };
 
@@ -167,7 +168,7 @@ export function DashboardView() {
     <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
       <div><div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.18em] text-moss"><span className="h-1.5 w-1.5 rounded-full bg-[#81a269]" /> data kegiatan</div><h1 className="text-[28px] font-bold tracking-[-.045em] sm:text-[32px]">Ringkasan kehadiran</h1><p className="mt-1.5 text-[12px] text-[#879088]">Lihat sebaran jamaah dan pantau daftar hadir.</p></div>
       <div className="flex flex-wrap items-end gap-2">
-        <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Tempat kegiatan</label><div className="relative min-w-[200px]"><select value={eventId} onChange={(e) => { setEventId(e.target.value); setPage(1); }} className="h-10 w-full appearance-none rounded-xl border border-[#e5e6dc] bg-white pl-3 pr-9 text-[11px] font-semibold outline-none focus:border-moss"><option value="all">Semua tempat</option>{stats.events.map((event) => <option key={event.id} value={event.id}>{event.location}</option>)}{!stats.events.length && <option value="">Belum ada kegiatan</option>}</select><ChevronDown size={14} className="pointer-events-none absolute right-3 top-[13px] text-[#859087]" /></div></div>
+        <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Tempat kegiatan</label><div className="relative min-w-[200px]"><select value={locationFilter} onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }} className="h-10 w-full appearance-none rounded-xl border border-[#e5e6dc] bg-white pl-3 pr-9 text-[11px] font-semibold outline-none focus:border-moss"><option value="all">Semua tempat</option>{locations.map((location) => <option key={location} value={location}>{location}</option>)}{!locations.length && <option value="">Belum ada kegiatan</option>}</select><ChevronDown size={14} className="pointer-events-none absolute right-3 top-[13px] text-[#859087]" /></div></div>
         <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Dari tanggal</label><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-[#e5e6dc] bg-white px-3 text-[11px] outline-none focus:border-moss" /></div>
         <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Sampai</label><input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-[#e5e6dc] bg-white px-3 text-[11px] outline-none focus:border-moss" /></div>
         <button onClick={() => { void loadStats(); void loadPeople(); }} title="Perbarui data" className="btn-secondary h-10 w-10 px-0"><RefreshCw size={14} /></button>
