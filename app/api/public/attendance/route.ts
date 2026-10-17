@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Periksa kembali data yang diisi.");
 
   const db = getDb();
-  const [event] = await db.select({ id: events.id }).from(events).where(eq(events.status, "active")).limit(1);
+  const [event] = await db.select({ id: events.id }).from(events).where(and(eq(events.id, parsed.data.eventId), eq(events.status, "active"))).limit(1);
   if (!event) return jsonError("Pendaftaran untuk kegiatan ini sudah ditutup.", 409);
   const [participatingVillage] = await db.select({ villageId: eventVillages.villageId }).from(eventVillages)
     .where(and(eq(eventVillages.eventId, event.id), eq(eventVillages.villageId, parsed.data.villageId))).limit(1);

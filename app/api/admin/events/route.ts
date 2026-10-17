@@ -30,7 +30,6 @@ export async function POST(request: NextRequest) {
   const validVillages = await db.select({ id: villages.id }).from(villages).where(inArray(villages.id, villageIds));
   if (validVillages.length !== villageIds.length) return jsonError("Pilih desa yang tersedia.");
   const event = await db.transaction(async (tx) => {
-    if (eventData.status === "active") await tx.update(events).set({ status: "draft" }).where(eq(events.status, "active"));
     const [created] = await tx.insert(events).values({ ...eventData, description: eventData.description || null }).returning();
     await tx.insert(eventVillages).values(villageIds.map((villageId) => ({ eventId: created.id, villageId })));
     return created;

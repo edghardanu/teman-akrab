@@ -18,7 +18,7 @@ export const events = sqliteTable("events", {
   description: text("description"),
   status: text("status", { enum: ["draft", "active", "finished"] }).notNull().default("draft"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => ({ activeUnique: uniqueIndex("events_single_active").on(table.status).where(sql`${table.status} = 'active'`) }));
+});
 
 export const villages = sqliteTable("villages", {
   id: integer("id").primaryKey({ autoIncrement: true }),

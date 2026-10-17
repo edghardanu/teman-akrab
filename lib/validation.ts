@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const attendanceSchema = z.object({
+  eventId: z.coerce.number().int().positive("Pilih kegiatan terlebih dahulu."),
   fullName: z.string().trim().min(3, "Nama minimal 3 karakter.").max(100, "Nama maksimal 100 karakter."),
   villageId: z.coerce.number().int().positive("Pilih desa terlebih dahulu."),
   groupId: z.coerce.number().int().positive("Pilih kelompok terlebih dahulu."),

@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, ne } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { isUniqueError, jsonError } from "@/lib/api";
 import { requireAdmin, sameOrigin } from "@/lib/auth";
@@ -23,7 +23,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (validVillages.length !== villageIds.length) return jsonError("Pilih desa yang tersedia.");
   try {
     const event = await db.transaction(async (tx) => {
-      if (eventData.status === "active") await tx.update(events).set({ status: "draft" }).where(and(eq(events.status, "active"), ne(events.id, id)));
       const [updated] = await tx.update(events).set({ ...eventData, description: eventData.description || null }).where(eq(events.id, id)).returning();
       await tx.delete(eventVillages).where(eq(eventVillages.eventId, id));
       await tx.insert(eventVillages).values(villageIds.map((villageId) => ({ eventId: id, villageId })));
