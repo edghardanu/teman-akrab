@@ -26,7 +26,7 @@ export function AttendanceForm() {
   const [submitLocked, setSubmitLocked] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const submitLock = useRef(false);
-  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
+  const { register, handleSubmit, watch, setValue, setError, clearErrors, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
   const selectedEventId = watch("eventId");
   const selectedEvent = activeEvents.find((item) => item.id === Number(selectedEventId)) ?? null;
   const selectedVillage = watch("villageId");
@@ -80,11 +80,16 @@ export function AttendanceForm() {
     submitLock.current = true;
     setSubmitLocked(true);
     setSubmitError("");
+    clearErrors("fullName");
     let submissionSucceeded = false;
     try {
       const response = await fetch("/api/public/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
-      const result = await safeJson<{ error?: string }>(response);
-      if (!response.ok) { setSubmitError(result.error ?? "Data belum dapat disimpan."); return; }
+      const result = await safeJson<{ error?: string; field?: string }>(response);
+      if (!response.ok) {
+        if (result.field === "fullName" && result.error) setError("fullName", { type: "server", message: result.error });
+        else setSubmitError(result.error ?? "Data belum dapat disimpan.");
+        return;
+      }
       submissionSucceeded = true;
       sessionStorage.setItem("attendance-name", values.fullName.trim());
       sessionStorage.setItem("attendance-event", selectedEvent?.name ?? "Pengajian Gabungan");

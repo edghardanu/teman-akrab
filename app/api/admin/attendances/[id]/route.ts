@@ -4,6 +4,7 @@ import { isUniqueError, jsonError } from "@/lib/api";
 import { requireAdmin, sameOrigin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { attendances, eventGroupMembers, groups, villages } from "@/lib/schema";
+import { normalizePersonName } from "@/lib/name-normalization";
 import { z } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
@@ -45,7 +46,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   try {
     const createdAt = new Date(`${parsed.data.createdAt}:00+07:00`).toISOString().replace("T", " ").slice(0, 19);
-    const [attendance] = await db.update(attendances).set({ ...parsed.data, createdAt }).where(eq(attendances.id, id)).returning({ id: attendances.id });
+    const [attendance] = await db.update(attendances).set({
+      ...parsed.data,
+      normalizedFullName: normalizePersonName(parsed.data.fullName),
+      createdAt,
+    }).where(eq(attendances.id, id)).returning({ id: attendances.id });
     return attendance ? NextResponse.json({ success: true }) : jsonError("Data kehadiran tidak ditemukan.", 404);
   } catch (error) {
     if (isUniqueError(error)) return jsonError("Peserta dengan nama, desa, dan kelompok tersebut sudah tercatat.", 409);
