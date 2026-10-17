@@ -21,6 +21,7 @@ export function AttendanceForm() {
   const [villages, setVillages] = useState<Option[]>([]);
   const [groups, setGroups] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingVillages, setLoadingVillages] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [loadingGroups, setLoadingGroups] = useState(false);
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
@@ -45,8 +46,9 @@ export function AttendanceForm() {
 
   useEffect(() => {
     const eventId = Number(selectedEventId);
-    if (!Number.isInteger(eventId) || eventId < 1) { setVillages([]); return; }
+    if (!Number.isInteger(eventId) || eventId < 1) { setVillages([]); setLoadingVillages(false); return; }
     let mounted = true;
+    setLoadingVillages(true);
     setVillages([]);
     setValue("villageId", undefined as unknown as number);
     setValue("groupId", undefined as unknown as number);
@@ -54,12 +56,12 @@ export function AttendanceForm() {
       .then((response) => safeJson<{ villages: Option[] }>(response))
       .then((data) => { if (mounted) setVillages(data.villages ?? []); })
       .catch(() => { if (mounted) setSubmitError("Daftar desa belum dapat dimuat. Silakan coba lagi."); })
-      .finally(() => { if (mounted) setLoading(false); });
+      .finally(() => { if (mounted) setLoadingVillages(false); });
     return () => { mounted = false; };
   }, [selectedEventId, setValue]);
 
   useEffect(() => {
-    if (!selectedVillage || !selectedEventId) { setGroups([]); return; }
+    if (!selectedVillage || !selectedEventId) { setGroups([]); setLoadingGroups(false); return; }
     let mounted = true;
     setLoadingGroups(true);
     setValue("groupId", undefined as unknown as number);
@@ -97,7 +99,7 @@ export function AttendanceForm() {
         <div><label className="field-label" htmlFor="eventId">Kegiatan</label><div className="relative"><select id="eventId" className="input-field appearance-none pr-10" defaultValue="" {...register("eventId")}><option value="">Pilih kegiatan</option>{activeEvents.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.eventDate} · {item.location}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.eventId && <p className="field-error">{errors.eventId.message}</p>}</div>
         <div><label className="field-label" htmlFor="fullName">Nama lengkap</label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" {...register("fullName")} />{errors.fullName && <p className="field-error">{errors.fullName.message}</p>}</div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><label className="field-label" htmlFor="villageId">Desa</label><div className="relative"><select id="villageId" className="input-field appearance-none pr-10" defaultValue="" {...register("villageId")}><option value="">Pilih desa</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.villageId && <p className="field-error">{errors.villageId.message}</p>}</div>
+          <div><label className="field-label" htmlFor="villageId">Desa</label><div className="relative"><select id="villageId" className="input-field appearance-none pr-10" disabled={!selectedEvent || loadingVillages} defaultValue="" {...register("villageId")}><option value="">{loadingVillages ? "Memuat desa..." : "Pilih desa"}</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.villageId && <p className="field-error">{errors.villageId.message}</p>}</div>
           <div><label className="field-label" htmlFor="groupId">Kelompok asal</label><div className="relative"><select id="groupId" className="input-field appearance-none pr-10" disabled={!selectedVillage || loadingGroups} defaultValue="" {...register("groupId")}><option value="">{!selectedVillage ? "Pilih desa dulu" : loadingGroups ? "Memuat kelompok..." : groups.length ? "Pilih kelompok" : "Belum ada kelompok"}</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.groupId && <p className="field-error">{errors.groupId.message}</p>}</div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
