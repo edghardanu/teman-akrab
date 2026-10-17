@@ -80,18 +80,22 @@ export function AttendanceForm() {
     submitLock.current = true;
     setSubmitLocked(true);
     setSubmitError("");
+    let submissionSucceeded = false;
     try {
       const response = await fetch("/api/public/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
       const result = await safeJson<{ error?: string }>(response);
       if (!response.ok) { setSubmitError(result.error ?? "Data belum dapat disimpan."); return; }
+      submissionSucceeded = true;
       sessionStorage.setItem("attendance-name", values.fullName.trim());
       sessionStorage.setItem("attendance-event", selectedEvent?.name ?? "Pengajian Gabungan");
       router.push("/sukses");
     } catch {
       setSubmitError("Koneksi terputus. Periksa jaringan lalu coba lagi.");
     } finally {
-      submitLock.current = false;
-      setSubmitLocked(false);
+      if (!submissionSucceeded) {
+        submitLock.current = false;
+        setSubmitLocked(false);
+      }
     }
   };
 

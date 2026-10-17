@@ -7,11 +7,11 @@ import { attendanceSchema } from "@/lib/validation";
 import { attendances, eventVillages, events, groups, villages } from "@/lib/schema";
 
 export async function POST(request: NextRequest) {
-  const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!await consumeRateLimit("attendance", ip, 8, 15 * 60_000)) return jsonError("Terlalu banyak percobaan. Silakan coba lagi beberapa menit lagi.", 429);
   const payload = await request.json().catch(() => null);
   const parsed = attendanceSchema.safeParse(payload);
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Periksa kembali data yang diisi.");
+  const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!await consumeRateLimit("attendance", ip, 300, 15 * 60_000)) return jsonError("Batas pendaftaran dari jaringan ini tercapai. Silakan hubungi panitia.", 429);
 
   const db = getDb();
   const [event] = await db.select({ id: events.id }).from(events).where(and(eq(events.id, parsed.data.eventId), eq(events.status, "active"))).limit(1);
