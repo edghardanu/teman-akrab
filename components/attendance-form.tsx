@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Check, ChevronDown, LoaderCircle } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -23,7 +23,9 @@ export function AttendanceForm() {
   const [loading, setLoading] = useState(true);
   const [loadingVillages, setLoadingVillages] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [submitLocked, setSubmitLocked] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
+  const submitLock = useRef(false);
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
   const selectedEventId = watch("eventId");
   const selectedEvent = activeEvents.find((item) => item.id === Number(selectedEventId)) ?? null;
@@ -74,6 +76,9 @@ export function AttendanceForm() {
   }, [selectedEventId, selectedVillage, setValue]);
 
   const onSubmit = async (values: FormValues) => {
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSubmitLocked(true);
     setSubmitError("");
     try {
       const response = await fetch("/api/public/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
@@ -84,6 +89,9 @@ export function AttendanceForm() {
       router.push("/sukses");
     } catch {
       setSubmitError("Koneksi terputus. Periksa jaringan lalu coba lagi.");
+    } finally {
+      submitLock.current = false;
+      setSubmitLocked(false);
     }
   };
 
@@ -108,7 +116,7 @@ export function AttendanceForm() {
         </div>
         <div><label className="field-label" htmlFor="occupation">Pekerjaan</label><input id="occupation" maxLength={100} placeholder="Contoh: Mahasiswa" className="input-field" {...register("occupation")} />{errors.occupation && <p className="field-error">{errors.occupation.message}</p>}</div>
         {submitError && <div role="alert" className="rounded-xl border border-[#f2d4ca] bg-[#fff7f4] px-4 py-3 text-[12px] leading-5 text-[#a5523e]">{submitError}</div>}
-        <button className="btn-primary mt-2 w-full" type="submit" disabled={!selectedEvent || isSubmitting || loading}>{isSubmitting ? <><LoaderCircle size={16} className="spin" /> Menyimpan kehadiran...</> : <>Kirim kehadiran <ArrowRight size={16} /></>}</button>
+        <button className="btn-primary mt-2 w-full" type="submit" disabled={!selectedEvent || isSubmitting || submitLocked || loading}>{isSubmitting || submitLocked ? <><LoaderCircle size={16} className="spin" /> Menyimpan kehadiran...</> : <>Kirim kehadiran <ArrowRight size={16} /></>}</button>
         <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-[10px] text-[#9ba098]"><Check size={12} className="text-moss" /> Data hanya digunakan untuk keperluan kegiatan ini.</p>
       </form>}
   </div>;
