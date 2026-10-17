@@ -21,11 +21,12 @@ export async function GET(request: NextRequest) {
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
   const params = request.nextUrl.searchParams;
   const eventId = Number(params.get("eventId"));
+  const allEventsSelected = params.get("eventId") === "all";
   const from = params.get("from");
   const to = params.get("to");
   const db = getDb();
   const allEvents = await db.select({ id: events.id, name: events.name, status: events.status, eventDate: events.eventDate }).from(events).orderBy(asc(events.eventDate));
-  const selected = Number.isInteger(eventId) && eventId > 0 ? eventId : allEvents.find((event) => event.status === "active")?.id ?? allEvents[0]?.id;
+  const selected = allEventsSelected ? undefined : Number.isInteger(eventId) && eventId > 0 ? eventId : allEvents.find((event) => event.status === "active")?.id ?? allEvents[0]?.id;
   const [event] = selected ? await db.select().from(events).where(eq(events.id, selected)).limit(1) : [];
   const conditions = [];
   if (selected) conditions.push(eq(attendances.eventId, selected));
