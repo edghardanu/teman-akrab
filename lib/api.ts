@@ -5,7 +5,7 @@ export function jsonError(message: string, status = 400, field?: string) {
 }
 
 export function isUniqueError(error: unknown) {
-  return error instanceof Error && /unique constraint|constraint failed/i.test(error.message);
+  return error instanceof Error && /unique constraint|constraint_unique|constraint failed/i.test(error.message);
 }
 
 export function csvCell(value: unknown) {
