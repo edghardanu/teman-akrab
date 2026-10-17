@@ -19,6 +19,10 @@ const tableNames = [
   "rate_limits",
 ];
 
+function normalizePersonName(name) {
+  return name.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("id-ID");
+}
+
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
 if (!url || !authToken) {
@@ -61,11 +65,14 @@ try {
       const result = await source.execute(`SELECT * FROM "${table}"`);
       if (!result.rows.length) continue;
 
-      const columns = result.columns;
+      const columns = [...result.columns];
+      if (table === "attendances" && !columns.includes("normalized_full_name")) {
+        columns.push("normalized_full_name");
+      }
       const sql = `INSERT OR IGNORE INTO "${table}" (${columns.map((column) => `"${column}"`).join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`;
       const statements = result.rows.map((row) => ({
         sql,
-        args: columns.map((column) => row[column]),
+        args: columns.map((column) => column === "normalized_full_name" ? normalizePersonName(String(row.full_name)) : row[column]),
       }));
 
       for (let offset = 0; offset < statements.length; offset += 250) {
@@ -86,6 +93,17 @@ try {
     FROM events CROSS JOIN villages
     WHERE villages.is_active = 1
       AND NOT EXISTS (SELECT 1 FROM event_villages WHERE event_villages.event_id = events.id)`);
+
+  const attendanceNames = await target.execute("SELECT id, full_name FROM attendances");
+  const normalizedNames = attendanceNames.rows.map((row) => ({
+    sql: "UPDATE attendances SET normalized_full_name = ? WHERE id = ?",
+    args: [normalizePersonName(String(row.full_name)), row.id],
+  }));
+  for (let offset = 0; offset < normalizedNames.length; offset += 250) {
+    await target.batch(normalizedNames.slice(offset, offset + 250), "write");
+  }
+  await target.execute(`CREATE UNIQUE INDEX IF NOT EXISTS attendances_no_duplicates
+    ON attendances(event_id, normalized_full_name, village_id, group_id)`);
 
   const counts = [];
   for (const table of tableNames) {

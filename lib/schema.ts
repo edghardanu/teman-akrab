@@ -43,6 +43,7 @@ export const attendances = sqliteTable("attendances", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   eventId: integer("event_id").notNull().references(() => events.id),
   fullName: text("full_name").notNull(),
+  normalizedFullName: text("normalized_full_name").notNull().default(""),
   villageId: integer("village_id").notNull().references(() => villages.id),
   groupId: integer("group_id").notNull().references(() => groups.id),
   age: integer("age").notNull(),
@@ -50,7 +51,7 @@ export const attendances = sqliteTable("attendances", {
   occupation: text("occupation").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
-  uniqueAttendance: uniqueIndex("attendances_no_duplicates").on(table.eventId, sql`lower(${table.fullName})`, table.villageId, table.groupId),
+  uniqueAttendance: uniqueIndex("attendances_no_duplicates").on(table.eventId, table.normalizedFullName, table.villageId, table.groupId),
   eventIdx: index("attendances_event_idx").on(table.eventId),
   villageIdx: index("attendances_village_idx").on(table.villageId),
   groupIdx: index("attendances_group_idx").on(table.groupId),
