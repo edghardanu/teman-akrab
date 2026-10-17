@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, count, eq, gte, lte, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { jsonError } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
@@ -6,16 +6,15 @@ import { getDb } from "@/lib/db";
 import { jakartaDateBound } from "@/lib/dates";
 import { attendances, events, groups, villages } from "@/lib/schema";
 
-const ageBands = ["≤12", "13–17", "18–25", "26–35", "36–45", "46–60", ">60"];
-function ageBand(age: number) {
-  if (age <= 12) return ageBands[0];
-  if (age <= 17) return ageBands[1];
-  if (age <= 25) return ageBands[2];
-  if (age <= 35) return ageBands[3];
-  if (age <= 45) return ageBands[4];
-  if (age <= 60) return ageBands[5];
-  return ageBands[6];
-}
+const ageBands = [
+  { label: "≤12", condition: sql`${attendances.age} <= 12` },
+  { label: "13–17", condition: sql`${attendances.age} BETWEEN 13 AND 17` },
+  { label: "18–25", condition: sql`${attendances.age} BETWEEN 18 AND 25` },
+  { label: "26–35", condition: sql`${attendances.age} BETWEEN 26 AND 35` },
+  { label: "36–45", condition: sql`${attendances.age} BETWEEN 36 AND 45` },
+  { label: "46–60", condition: sql`${attendances.age} BETWEEN 46 AND 60` },
+  { label: ">60", condition: sql`${attendances.age} > 60` },
+];
 
 export async function GET(request: NextRequest) {
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
@@ -25,35 +24,40 @@ export async function GET(request: NextRequest) {
   const from = params.get("from");
   const to = params.get("to");
   const db = getDb();
-  const allEvents = await db.select({ id: events.id, name: events.name, location: events.location, status: events.status, eventDate: events.eventDate }).from(events).orderBy(asc(events.eventDate));
+  const allEvents = await db.select({ id: events.id, name: events.name, location: events.location, status: events.status, eventDate: events.eventDate, eventTime: events.eventTime }).from(events).orderBy(asc(events.eventDate));
   const selected = allEventsSelected ? undefined : Number.isInteger(eventId) && eventId > 0 ? eventId : allEvents.find((event) => event.status === "active")?.id ?? allEvents[0]?.id;
-  const [event] = selected ? await db.select().from(events).where(eq(events.id, selected)).limit(1) : [];
   const conditions = [];
   if (selected) conditions.push(eq(attendances.eventId, selected));
   if (from) conditions.push(gte(attendances.createdAt, jakartaDateBound(from)));
   if (to) conditions.push(lte(attendances.createdAt, jakartaDateBound(to, true)));
-  const rows = conditions.length ? await db.select({ id: attendances.id, age: attendances.age, gender: attendances.gender, villageId: attendances.villageId, groupId: attendances.groupId }).from(attendances).where(and(...conditions)) : [];
-  const villageData = await db.select({ id: villages.id, name: villages.name }).from(villages).orderBy(asc(villages.name));
-  const groupData = await db.select({ id: groups.id, name: groups.name, villageId: groups.villageId }).from(groups).orderBy(asc(groups.name));
-  const villageCounts = new Map<number, number>();
-  const groupCounts = new Map<number, number>();
-  const ages = new Map(ageBands.map((band) => [band, 0]));
-  let ageTotal = 0;
-  let maleTotal = 0;
-  let femaleTotal = 0;
-  rows.forEach((row) => {
-    villageCounts.set(row.villageId, (villageCounts.get(row.villageId) ?? 0) + 1);
-    groupCounts.set(row.groupId, (groupCounts.get(row.groupId) ?? 0) + 1);
-    ages.set(ageBand(row.age), (ages.get(ageBand(row.age)) ?? 0) + 1);
-    ageTotal += row.age;
-    if (row.gender === "male") maleTotal++;
-    if (row.gender === "female") femaleTotal++;
-  });
+  const where = conditions.length ? and(...conditions) : undefined;
+  const [summaryRows, villageCounts, groupCounts, villageData, groupData] = await Promise.all([
+    db.select({
+      total: count().mapWith(Number),
+      male: sql<number>`coalesce(sum(case when ${attendances.gender} = 'male' then 1 else 0 end), 0)`.mapWith(Number),
+      female: sql<number>`coalesce(sum(case when ${attendances.gender} = 'female' then 1 else 0 end), 0)`.mapWith(Number),
+      activeVillages: sql<number>`count(distinct ${attendances.villageId})`.mapWith(Number),
+      activeGroups: sql<number>`count(distinct ${attendances.groupId})`.mapWith(Number),
+      averageAge: sql<number>`coalesce(round(avg(${attendances.age})), 0)`.mapWith(Number),
+      ...Object.fromEntries(ageBands.map(({ label, condition }, index) => [
+        `age${index}`,
+        sql<number>`coalesce(sum(case when ${condition} then 1 else 0 end), 0)`.mapWith(Number),
+      ])),
+    }).from(attendances).where(where),
+    db.select({ villageId: attendances.villageId, total: count().mapWith(Number) }).from(attendances).where(where).groupBy(attendances.villageId),
+    db.select({ groupId: attendances.groupId, total: count().mapWith(Number) }).from(attendances).where(where).groupBy(attendances.groupId),
+    db.select({ id: villages.id, name: villages.name }).from(villages).orderBy(asc(villages.name)),
+    db.select({ id: groups.id, name: groups.name, villageId: groups.villageId }).from(groups).orderBy(asc(groups.name)),
+  ]);
+  const [summary] = summaryRows;
+  const selectedEvent = selected ? allEvents.find((event) => event.id === selected) : undefined;
+  const villageTotals = new Map(villageCounts.map((row) => [row.villageId, row.total]));
+  const groupTotals = new Map(groupCounts.map((row) => [row.groupId, row.total]));
   return NextResponse.json({
-    event, events: allEvents,
-    summary: { total: rows.length, male: maleTotal, female: femaleTotal, activeVillages: new Set(rows.map((row) => row.villageId)).size, activeGroups: new Set(rows.map((row) => row.groupId)).size, averageAge: rows.length ? Math.round(ageTotal / rows.length) : 0 },
-    villages: villageData.map((village) => ({ ...village, total: villageCounts.get(village.id) ?? 0 })),
-    groups: groupData.map((group) => ({ ...group, total: groupCounts.get(group.id) ?? 0 })),
-    ages: ageBands.map((label) => ({ label, total: ages.get(label) ?? 0 })),
+    event: selectedEvent ?? null, events: allEvents,
+    summary: { total: summary.total, male: summary.male, female: summary.female, activeVillages: summary.activeVillages, activeGroups: summary.activeGroups, averageAge: summary.averageAge },
+    villages: villageData.map((village) => ({ ...village, total: villageTotals.get(village.id) ?? 0 })),
+    groups: groupData.map((group) => ({ ...group, total: groupTotals.get(group.id) ?? 0 })),
+    ages: ageBands.map(({ label }, index) => ({ label, total: summary[`age${index}` as keyof typeof summary] })),
   });
 }
