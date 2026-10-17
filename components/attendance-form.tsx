@@ -26,7 +26,7 @@ export function AttendanceForm() {
   const [submitLocked, setSubmitLocked] = useState(false);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const submitLock = useRef(false);
-  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
+  const { register, handleSubmit, watch, setValue, setError, clearErrors, formState: { errors, isSubmitting } } = useForm<FormInput, unknown, FormValues>({ resolver: zodResolver(attendanceSchema), defaultValues: { eventId: undefined as unknown as number, fullName: "", occupation: "" } });
   const selectedEventId = watch("eventId");
   const selectedEvent = activeEvents.find((item) => item.id === Number(selectedEventId)) ?? null;
   const selectedVillage = watch("villageId");
@@ -80,12 +80,14 @@ export function AttendanceForm() {
     submitLock.current = true;
     setSubmitLocked(true);
     setSubmitError("");
+    clearErrors("fullName");
     let submissionSucceeded = false;
     try {
       const response = await fetch("/api/public/attendance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
-      const result = await safeJson<{ error?: string }>(response);
+      const result = await safeJson<{ error?: string; field?: string }>(response);
       if (!response.ok) {
-        setSubmitError(result.error ?? "Data belum dapat disimpan.");
+        if (result.field === "fullName" && result.error) setError("fullName", { type: "server", message: result.error });
+        else setSubmitError(result.error ?? "Pendaftaran belum dapat diproses. Periksa kembali isian Anda lalu coba lagi. Jika kendala berlanjut, hubungi panitia.");
         return;
       }
       submissionSucceeded = true;
@@ -112,7 +114,7 @@ export function AttendanceForm() {
       </div>
       {!activeEvents.length && !loading ? <div className="rounded-2xl border border-[#ede8d9] bg-[#fcfaf4] p-5 text-sm leading-6 text-[#717b73]">{submitError || "Belum ada kegiatan aktif. Silakan kembali setelah panitia membuka absensi."}</div> : <form onSubmit={handleSubmit(onSubmit)} className="relative space-y-4" noValidate>
         <div><label className="field-label" htmlFor="eventId">Kegiatan</label><div className="relative"><select id="eventId" className="input-field appearance-none pr-10" defaultValue="" {...register("eventId")}><option value="">Pilih kegiatan</option>{activeEvents.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.eventDate} · {item.location}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.eventId && <p className="field-error">{errors.eventId.message}</p>}</div>
-        <div><label className="field-label" htmlFor="fullName">Nama lengkap</label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" {...register("fullName")} />{errors.fullName && <p className="field-error">{errors.fullName.message}</p>}</div>
+        <div><label className="field-label" htmlFor="fullName">Nama lengkap</label><input id="fullName" autoComplete="name" className="input-field" placeholder="Contoh: Siti Aminah" aria-invalid={Boolean(errors.fullName)} aria-describedby={errors.fullName ? "fullName-error" : "fullName-hint"} {...register("fullName")} />{errors.fullName ? <p id="fullName-error" role="alert" className="field-error">{errors.fullName.message}</p> : <p id="fullName-hint" className="mt-1.5 text-[11px] leading-5 text-[#859087]">Gunakan nama sesuai identitas. Pendaftaran berulang untuk kegiatan, desa, dan kelompok yang sama tidak akan membuat data ganda.</p>}</div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div><label className="field-label" htmlFor="villageId">Desa</label><div className="relative"><select id="villageId" className="input-field appearance-none pr-10" disabled={!selectedEvent || loadingVillages} defaultValue="" {...register("villageId")}><option value="">{loadingVillages ? "Memuat desa..." : "Pilih desa"}</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.villageId && <p className="field-error">{errors.villageId.message}</p>}</div>
           <div><label className="field-label" htmlFor="groupId">Kelompok asal</label><div className="relative"><select id="groupId" className="input-field appearance-none pr-10" disabled={!selectedVillage || loadingGroups} defaultValue="" {...register("groupId")}><option value="">{!selectedVillage ? "Pilih desa dulu" : loadingGroups ? "Memuat kelompok..." : groups.length ? "Pilih kelompok" : "Belum ada kelompok"}</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><ChevronDown size={15} className="pointer-events-none absolute right-4 top-[18px] text-[#829087]" /></div>{errors.groupId && <p className="field-error">{errors.groupId.message}</p>}</div>

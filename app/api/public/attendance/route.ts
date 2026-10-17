@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
   try {
     await db.insert(attendances).values({ ...parsed.data, normalizedFullName, eventId: event.id });
   } catch (error) {
-    if (!isUniqueError(error)) throw error;
+    if (isUniqueError(error)) return jsonError("Kehadiran Anda sudah tercatat sebelumnya.", 409, "fullName");
+    throw error;
   }
   return NextResponse.json({ success: true, message: "Pendaftaran telah diproses." });
 }
