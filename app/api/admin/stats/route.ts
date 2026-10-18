@@ -4,7 +4,7 @@ import { jsonError } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { jakartaDateBound } from "@/lib/dates";
-import { attendances, events, groups, villages } from "@/lib/schema";
+import { attendances, eventVillages, events, groups, villages } from "@/lib/schema";
 
 const ageBands = [
   { label: "≤12", condition: sql`${attendances.age} <= 12` },
@@ -27,6 +27,13 @@ export async function GET(request: NextRequest) {
   const db = getDb();
   const allEvents = await db.select({ id: events.id, name: events.name, location: events.location, status: events.status, eventDate: events.eventDate, eventTime: events.eventTime }).from(events).orderBy(asc(events.eventDate));
   const selected = allEventsSelected ? undefined : Number.isInteger(eventId) && eventId > 0 ? eventId : allEvents.find((event) => event.status === "active")?.id ?? allEvents[0]?.id;
+  const filteredEventIds = locationFilter !== null
+    ? allEvents.filter((event) => locationFilter === "all" || event.location === locationFilter).map((event) => event.id)
+    : selected ? [selected] : allEvents.map((event) => event.id);
+  const participatingVillages = filteredEventIds.length
+    ? await db.selectDistinct({ id: eventVillages.villageId }).from(eventVillages)
+      .where(inArray(eventVillages.eventId, filteredEventIds))
+    : [];
   const conditions = [];
   if (locationFilter !== null) {
     if (locationFilter !== "all") {
@@ -61,8 +68,9 @@ export async function GET(request: NextRequest) {
   const groupTotals = new Map(groupCounts.map((row) => [row.groupId, row.total]));
   return NextResponse.json({
     event: selectedEvent ?? null, events: allEvents,
-    summary: { total: summary.total, male: summary.male, female: summary.female, activeVillages: summary.activeVillages, activeGroups: summary.activeGroups, averageAge: summary.averageAge },
-    villages: villageData.map((village) => ({ ...village, total: villageTotals.get(village.id) ?? 0 })),
+    summary: { total: summary.total, male: summary.male, female: summary.female, activeVillages: summary.activeVillages, totalVillages: participatingVillages.length, activeGroups: summary.activeGroups, averageAge: summary.averageAge },
+    villages: villageData.filter((village) => participatingVillages.some((participatingVillage) => participatingVillage.id === village.id))
+      .map((village) => ({ ...village, total: villageTotals.get(village.id) ?? 0 })),
     groups: groupData.map((group) => ({ ...group, total: groupTotals.get(group.id) ?? 0 })),
     ages: ageBands.map(({ label }, index) => ({ label, total: summary[`age${index}` as keyof typeof summary] })),
   });
