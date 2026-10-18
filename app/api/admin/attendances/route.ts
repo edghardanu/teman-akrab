@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, like, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { jsonError } from "@/lib/api";
 import { requireAdmin } from "@/lib/auth";
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
   const sortBy = params.get("sort") || "createdAt";
   const sortDirection = params.get("direction") === "asc" ? "asc" : "desc";
   const q = (params.get("q") || "").trim();
+  if (q.length > 100) return jsonError("Pencarian maksimal 100 karakter.");
   const from = params.get("from");
   const to = params.get("to");
   const db = getDb();
@@ -30,11 +31,21 @@ export async function GET(request: NextRequest) {
       conditions.push(matchingEventIds.length ? inArray(attendances.eventId, matchingEventIds) : eq(attendances.eventId, -1));
     }
   } else if (!allEventsSelected) conditions.push(eq(attendances.eventId, eventId));
-  if (q) conditions.push(or(like(attendances.fullName, `%${q}%`), like(attendances.occupation, `%${q}%`))!);
+  if (q) {
+    const searchableColumns = [attendances.fullName, attendances.occupation, villages.name, groups.name, events.name, events.location];
+    const terms = q.split(/\s+/).filter(Boolean).slice(0, 10);
+    conditions.push(and(...terms.map((term) => or(...searchableColumns.map(
+      (column) => sql`instr(lower(${column}), lower(${term})) > 0`,
+    ))!))!);
+  }
   if (from) conditions.push(gte(attendances.createdAt, jakartaDateBound(from)));
   if (to) conditions.push(lte(attendances.createdAt, jakartaDateBound(to, true)));
   const where = and(...conditions);
-  const [totalRow] = await db.select({ value: count() }).from(attendances).where(where);
+  const [totalRow] = await db.select({ value: count() }).from(attendances)
+    .innerJoin(events, eq(attendances.eventId, events.id))
+    .innerJoin(villages, eq(attendances.villageId, villages.id))
+    .innerJoin(groups, eq(attendances.groupId, groups.id))
+    .where(where);
   const total = totalRow?.value ?? 0;
   const orderColumn = sortBy === "fullName" ? attendances.fullName : sortBy === "age" ? attendances.age : attendances.createdAt;
   const ordered = sortDirection === "asc" ? asc(orderColumn) : desc(orderColumn);
