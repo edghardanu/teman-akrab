@@ -6,7 +6,8 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { safeJson } from "@/components/api-json";
 
 type EventOption = { id: number; name: string; location: string; status: string; eventDate: string };
-type Stats = { event?: { id: number; name: string; status: string } | null; events: EventOption[]; summary: { total: number; male: number; female: number; activeVillages: number; totalVillages: number; activeGroups: number; averageAge: number }; villages: { id: number; name: string; total: number }[]; groups: { id: number; name: string; villageId: number; total: number }[]; ages: { label: string; total: number }[] };
+type WorkStats = { working: number; notWorking: number };
+type Stats = { event?: { id: number; name: string; status: string } | null; events: EventOption[]; summary: { total: number; male: number; female: number; activeVillages: number; totalVillages: number; activeGroups: number; averageAge: number }; villages: ({ id: number; name: string; total: number } & WorkStats)[]; groups: ({ id: number; name: string; villageId: number; total: number } & WorkStats)[]; ages: { label: string; total: number }[] };
 type Person = { id: number; eventId: number; eventLocation: string; fullName: string; villageId: number; villageName: string; groupId: number; groupName: string; age: number | null; gender: "male" | "female" | "unknown"; occupation: string; additionalNotes: string | null; createdAt: string };
 type VillageOption = { id: number; name: string; isActive: boolean };
 type GroupOption = { id: number; name: string; villageId: number; isActive: boolean };
@@ -28,6 +29,8 @@ export function DashboardView() {
   const [stats, setStats] = useState<Stats>(emptyStats);
   const [locationFilter, setLocationFilter] = useState("all");
   const [villageId, setVillageId] = useState("all");
+  const [employmentView, setEmploymentView] = useState<"village" | "group">("village");
+  const [employmentVillageFilter, setEmploymentVillageFilter] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [dateFilterReady, setDateFilterReady] = useState(false);
@@ -121,6 +124,14 @@ export function DashboardView() {
 
   const visibleGroups = useMemo(() => stats.groups.filter((group) => villageId === "all" || group.villageId === Number(villageId)), [stats.groups, villageId]);
   const visibleGroupTotal = useMemo(() => visibleGroups.reduce((sum, group) => sum + group.total, 0), [visibleGroups]);
+  const employmentRows = useMemo<Array<{ id: number; name: string; total: number; working: number; notWorking: number; villageName?: string }>>(
+    () => employmentView === "village"
+      ? stats.villages
+      : stats.groups
+        .filter((group) => employmentVillageFilter === "all" || group.villageId === Number(employmentVillageFilter))
+        .map((group) => ({ ...group, villageName: stats.villages.find((village) => village.id === group.villageId)?.name ?? "" })),
+    [employmentView, employmentVillageFilter, stats.groups, stats.villages],
+  );
   const locations = useMemo(() => [...new Set(stats.events.map((event) => event.location))].sort((a, b) => a.localeCompare(b, "id")), [stats.events]);
   const exportUrl = useMemo(() => { const params = new URLSearchParams({ location: locationFilter }); if (from) params.set("from", from); if (to) params.set("to", to); return `/api/admin/attendances/export?${params}`; }, [locationFilter, from, to]);
   const exportPdfUrl = useMemo(() => { const params = new URLSearchParams({ location: locationFilter, villageId }); if (from) params.set("from", from); if (to) params.set("to", to); return `/api/admin/attendances/export/pdf?${params}`; }, [locationFilter, villageId, from, to]);
@@ -275,6 +286,49 @@ export function DashboardView() {
         </div>
       </div>
     </div>
+    <section className="card mt-4 p-5 sm:p-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+        <div><h2 className="text-[14px] font-bold">Status pekerjaan peserta</h2><p className="mt-1 text-[10px] text-[#959c94]">Jumlah peserta bekerja dan belum bekerja pada filter dashboard ini.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <label className="sr-only" htmlFor="employment-view">Kelompokkan berdasarkan</label>
+          <select id="employment-view" value={employmentView} onChange={(event) => setEmploymentView(event.target.value as "village" | "group")} className="h-9 rounded-xl border border-[#e6e7dd] bg-white px-3 text-[10px] font-semibold outline-none focus:border-moss">
+            <option value="village">Per desa</option>
+            <option value="group">Per kelompok</option>
+          </select>
+          {employmentView === "group" && <div className="relative">
+            <Filter size={12} className="pointer-events-none absolute left-3 top-[12px] text-[#88938a]" />
+            <label className="sr-only" htmlFor="employment-village">Filter desa kelompok</label>
+            <select id="employment-village" value={employmentVillageFilter} onChange={(event) => setEmploymentVillageFilter(event.target.value)} className="h-9 appearance-none rounded-xl border border-[#e6e7dd] bg-white pl-8 pr-8 text-[10px] font-semibold outline-none focus:border-moss">
+              <option value="all">Semua desa</option>
+              {stats.villages.map((village) => <option key={village.id} value={village.id}>{village.name}</option>)}
+            </select>
+            <ChevronDown size={12} className="pointer-events-none absolute right-3 top-[13px] text-[#89948b]" />
+          </div>}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[10px] text-[#748078]">
+        <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-[#527a55]" />Sudah bekerja</span>
+        <span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-[#d48b68]" />Belum bekerja</span>
+      </div>
+      <div className="admin-scroll mt-3 max-h-[460px] overflow-auto">
+        <table className="w-full min-w-[500px] border-collapse text-left">
+          <thead className="sticky top-0 bg-[#fbfbf8] text-[9px] font-bold uppercase tracking-[.1em] text-[#939b93]">
+            <tr className="border-y border-[#eeeee7]"><th className="px-4 py-3">{employmentView === "village" ? "Desa" : "Kelompok"}</th>{employmentView === "group" && <th className="px-4 py-3">Desa</th>}<th className="px-4 py-3 text-right">Sudah bekerja</th><th className="px-4 py-3 text-right">Belum bekerja</th><th className="px-4 py-3 text-right">Total</th></tr>
+          </thead>
+          <tbody>
+            {employmentRows.map((row) => <tr key={`${employmentView}-${row.id}`} className="border-b border-[#f0f0e9] text-[11px] last:border-0">
+              <td className="px-4 py-3 font-semibold">{row.name}</td>
+              {employmentView === "group" && <td className="px-4 py-3 text-[#748078]">{row.villageName}</td>}
+              <td className="px-4 py-3 text-right font-semibold text-[#527a55]">{money.format(row.working)}</td>
+              <td className="px-4 py-3 text-right font-semibold text-[#b87655]">{money.format(row.notWorking)}</td>
+              <td className="px-4 py-3 text-right font-bold">{money.format(row.total)}</td>
+            </tr>)}
+            {!employmentRows.length && <tr><td colSpan={employmentView === "group" ? 5 : 4} className="px-4 py-8 text-center text-[11px] text-[#929a92]">{loading ? "Memuat statistik..." : "Belum ada peserta pada filter ini."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-[9px] leading-4 text-[#929a92]">Kategori belum bekerja dikenali dari isian pekerjaan yang menyebut pelajar, mahasiswa, ibu rumah tangga, santri, pensiun, pengangguran, atau belum/tidak bekerja. Isian lainnya dihitung sudah bekerja.</p>
+    </section>
     <div className="card mt-4 p-5 sm:p-6"><div className="flex items-center justify-between"><div><h2 className="text-[14px] font-bold">Kehadiran per rentang umur</h2><p className="mt-1 text-[10px] text-[#959c94]">Komposisi umur jamaah yang hadir.</p></div><span className="rounded-lg bg-[#f7f1e9] px-2 py-1 text-[9px] font-bold text-[#a06b4e]">USIA</span></div><div className="mt-4 h-[200px]">{stats.summary.total ? <ResponsiveContainer width="100%" height="100%"><BarChart data={stats.ages} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}><CartesianGrid stroke="#edf0e8" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 10, fill: "#869087" }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 9, fill: "#9ba199" }} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: "#f3f5ed" }} contentStyle={{ borderRadius: 12, border: "1px solid #e8e8df", fontSize: 11 }} /><Bar dataKey="total" name="Jamaah" fill="#d48b68" radius={[6, 6, 0, 0]} maxBarSize={44} /></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-[11px] text-[#9ba198]">Belum ada data umur.</div>}</div></div>
     <div className="card mt-4 overflow-hidden">
       <div className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center sm:px-6"><div><h2 className="text-[14px] font-bold">Daftar hadir</h2><p className="mt-1 text-[10px] text-[#959c94]">{total ? `${money.format(total)} peserta terdaftar` : "Data peserta dari semua kegiatan."}{lastUpdated && <span> · Diperbarui {formatTime(lastUpdated.toISOString())}</span>}</p></div><div className="flex flex-wrap items-center gap-2"><form onSubmit={applySearch} className="relative"><Search size={14} className="absolute left-3 top-[12px] text-[#929a92]" /><input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} maxLength={100} placeholder="Cari nama, pekerjaan, desa..." aria-label="Cari nama, pekerjaan, desa, kelompok, atau kegiatan" className="h-9 w-[220px] rounded-xl border border-[#e5e6dc] bg-white pl-9 pr-3 text-[10px] outline-none focus:border-moss" /></form><a href={exportUrl} className="btn-secondary h-9"><ArrowDownToLine size={14} /> Ekspor CSV</a><a href={exportPdfUrl} target="_blank" rel="noreferrer" title="Cetak atau simpan sebagai PDF" className="btn-secondary h-9"><FileDown size={14} /> Ekspor PDF</a></div></div>
