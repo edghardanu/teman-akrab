@@ -1,16 +1,18 @@
 "use client";
 
-import { Activity, ArrowDown, ArrowDownToLine, ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Edit3, FileDown, Filter, LoaderCircle, RefreshCw, Search, Trash2, UsersRound, UserRound, UserRoundCheck, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUp, CalendarDays, ChevronDown, CircleHelp, CirclePlus, Edit3, FileDown, Filter, LoaderCircle, RefreshCw, Search, Trash2, UsersRound, UserRound, UserRoundCheck, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { safeJson } from "@/components/api-json";
 
 type EventOption = { id: number; name: string; location: string; status: string; eventDate: string };
 type Stats = { event?: { id: number; name: string; status: string } | null; events: EventOption[]; summary: { total: number; male: number; female: number; activeVillages: number; totalVillages: number; activeGroups: number; averageAge: number }; villages: { id: number; name: string; total: number }[]; groups: { id: number; name: string; villageId: number; total: number }[]; ages: { label: string; total: number }[] };
-type Person = { id: number; eventId: number; eventLocation: string; fullName: string; villageId: number; villageName: string; groupId: number; groupName: string; age: number; gender: "male" | "female" | "unknown"; occupation: string; createdAt: string };
+type Person = { id: number; eventId: number; eventLocation: string; fullName: string; villageId: number; villageName: string; groupId: number; groupName: string; age: number | null; gender: "male" | "female" | "unknown"; occupation: string; additionalNotes: string | null; createdAt: string };
 type VillageOption = { id: number; name: string; isActive: boolean };
 type GroupOption = { id: number; name: string; villageId: number; isActive: boolean };
 type AttendanceForm = { fullName: string; villageId: string; groupId: string; age: string; gender: Person["gender"]; occupation: string; createdAt: string };
+type AdminEventOption = EventOption & { villageIds: number[] };
+type NewAttendanceForm = { eventId: string; fullName: string; villageId: string; groupId: string; occupation: string; additionalNotes: string };
 
 const VILLAGE_COLORS = ["#315e4d", "#d17a55", "#718d62", "#648ca3"];
 const GROUP_COLORS = ["#315e4d", "#c56d4f", "#73914f", "#8a6bb1", "#4385a3", "#c18a2e", "#a8556e", "#55704b", "#d07c4f", "#4d688f", "#91a644", "#b05d3a", "#4c9b8a", "#937245", "#7868a6", "#a35688"];
@@ -46,9 +48,23 @@ export function DashboardView() {
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [editForm, setEditForm] = useState<AttendanceForm>({ fullName: "", villageId: "", groupId: "", age: "", gender: "unknown", occupation: "", createdAt: "" });
   const [editOptionsLoading, setEditOptionsLoading] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [addForm, setAddForm] = useState<NewAttendanceForm>({ eventId: "", fullName: "", villageId: "", groupId: "", occupation: "", additionalNotes: "" });
+  const [addEvents, setAddEvents] = useState<AdminEventOption[]>([]);
+  const [addOptionsLoaded, setAddOptionsLoaded] = useState(false);
+  const [addOptionsLoading, setAddOptionsLoading] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [editError, setEditError] = useState("");
+  const dateRangeValid = Boolean(from && to && from <= to);
+  const availableAddEvents = useMemo(
+    () => addEvents.filter((event) => dateRangeValid && event.eventDate >= from && event.eventDate <= to && (locationFilter === "all" || event.location === locationFilter)),
+    [addEvents, dateRangeValid, from, to, locationFilter],
+  );
+  const selectedAddEvent = addEvents.find((event) => event.id === Number(addForm.eventId));
+  const addEventVillages = villages.filter((village) => selectedAddEvent?.villageIds.includes(village.id));
 
   useEffect(() => {
     const now = new Date();
@@ -113,7 +129,7 @@ export function DashboardView() {
 
   const openEdit = async (person: Person) => {
     setEditingPerson(person);
-    setEditForm({ fullName: person.fullName, villageId: String(person.villageId), groupId: String(person.groupId), age: String(person.age), gender: person.gender, occupation: person.occupation, createdAt: localDateTimeValue(person.createdAt) });
+    setEditForm({ fullName: person.fullName, villageId: String(person.villageId), groupId: String(person.groupId), age: String(person.age ?? ""), gender: person.gender, occupation: person.occupation, createdAt: localDateTimeValue(person.createdAt) });
     setEditError("");
     if (villages.length && groups.length) return;
     setEditOptionsLoading(true);
@@ -137,13 +153,68 @@ export function DashboardView() {
     }
   };
 
+  const openAddParticipant = async () => {
+    setAddForm({ eventId: "", fullName: "", villageId: "", groupId: "", occupation: "", additionalNotes: "" });
+    setAddError("");
+    setAddingPerson(true);
+    if (addOptionsLoaded) return;
+    setAddOptionsLoading(true);
+    try {
+      const [eventResponse, villageResponse, groupResponse] = await Promise.all([
+        fetch("/api/admin/events", { cache: "no-store" }),
+        fetch("/api/admin/villages", { cache: "no-store" }),
+        fetch("/api/admin/groups", { cache: "no-store" }),
+      ]);
+      if ([eventResponse, villageResponse, groupResponse].some((response) => response.status === 401)) {
+        window.location.assign("/admin/login");
+        return;
+      }
+      const [eventData, villageData, groupData] = await Promise.all([
+        safeJson<{ events?: AdminEventOption[]; error?: string }>(eventResponse),
+        safeJson<{ villages?: VillageOption[]; error?: string }>(villageResponse),
+        safeJson<{ groups?: GroupOption[]; error?: string }>(groupResponse),
+      ]);
+      if (!eventResponse.ok || !villageResponse.ok || !groupResponse.ok) {
+        throw new Error(eventData.error ?? villageData.error ?? groupData.error ?? "Pilihan kegiatan, desa, dan kelompok belum dapat dimuat.");
+      }
+      setAddEvents(eventData.events ?? []);
+      setVillages(villageData.villages ?? []);
+      setGroups(groupData.groups ?? []);
+      setAddOptionsLoaded(true);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : "Pilihan kegiatan, desa, dan kelompok belum dapat dimuat.");
+    } finally {
+      setAddOptionsLoading(false);
+    }
+  };
+
+  const saveNewAttendance = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (addBusy || !dateRangeValid) return;
+    setAddBusy(true);
+    setAddError("");
+    const response = await fetch("/api/admin/attendances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...addForm, eventId: Number(addForm.eventId), villageId: Number(addForm.villageId), groupId: Number(addForm.groupId), from, to, location: locationFilter }),
+    }).catch(() => null);
+    const data = await safeJson<{ error?: string }>(response);
+    setAddBusy(false);
+    if (response?.status === 401) { window.location.assign("/admin/login"); return; }
+    if (!response?.ok) { setAddError(data.error ?? "Peserta belum dapat ditambahkan."); return; }
+    setAddingPerson(false);
+    if (page === 1) void loadPeople();
+    else setPage(1);
+    void loadStats();
+  };
+
   const saveAttendance = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingPerson) return;
     setActionBusy(true); setEditError("");
     const response = await fetch(`/api/admin/attendances/${editingPerson.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editForm, villageId: Number(editForm.villageId), groupId: Number(editForm.groupId), age: Number(editForm.age) }),
+      body: JSON.stringify({ ...editForm, villageId: Number(editForm.villageId), groupId: Number(editForm.groupId), age: editForm.age ? Number(editForm.age) : null }),
     }).catch(() => null);
     const data = await safeJson<{ error?: string }>(response);
     setActionBusy(false);
@@ -183,8 +254,10 @@ export function DashboardView() {
         <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Dari tanggal</label><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-[#e5e6dc] bg-white px-3 text-[11px] outline-none focus:border-moss" /></div>
         <div><label className="mb-1.5 block text-[9px] font-bold uppercase tracking-[.12em] text-[#98a098]">Sampai</label><input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className="h-10 rounded-xl border border-[#e5e6dc] bg-white px-3 text-[11px] outline-none focus:border-moss" /></div>
         <button onClick={() => { void loadStats(); void loadPeople(); }} title="Perbarui data" className="btn-secondary h-10 w-10 px-0"><RefreshCw size={14} /></button>
+        {dateRangeValid && <button onClick={() => void openAddParticipant()} className="btn-primary h-10 min-h-10 px-4 text-[11px]"><CirclePlus size={14} /> Tambah peserta</button>}
       </div>
     </div>
+    {from && to && from > to && <p role="alert" className="mb-4 text-[11px] text-[#a5523e]">Tanggal awal tidak boleh melewati tanggal akhir.</p>}
     {error && <div className="mb-5 rounded-xl border border-[#f1d6ce] bg-[#fff6f2] px-4 py-3 text-[12px] text-[#a34f3b]">{error}</div>}
     {!stats.events.length && !loading && <div className="mb-5 flex flex-col justify-between gap-3 rounded-2xl border border-[#e6ddbf] bg-[#fbf6e6] p-5 sm:flex-row sm:items-center"><div><p className="text-[13px] font-bold text-[#665733]">Belum ada kegiatan</p><p className="mt-1 text-[11px] text-[#837a63]">Buat kegiatan dan aktifkan agar peserta bisa mulai mengisi kehadiran.</p></div><a className="btn-primary" href="/admin/kegiatan">Kelola kegiatan <ArrowDown size={14} className="rotate-[-90deg]" /></a></div>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">{statCards.map(({ label, value, detail, icon: Icon, tint }) => <div key={label} className="card flex items-center justify-between p-4 sm:p-5"><div><p className="text-[10px] font-semibold text-[#89928b]">{label}</p><p className="mt-2 text-[25px] font-bold tracking-[-.04em]">{loading ? "—" : value}</p><p className="mt-1 text-[9px] text-[#a1a69f]">{detail}</p></div><div className="flex h-10 w-10 items-center justify-center rounded-[14px] text-forest" style={{ background: tint }}><Icon size={18} /></div></div>)}</div>
@@ -205,13 +278,24 @@ export function DashboardView() {
     <div className="card mt-4 p-5 sm:p-6"><div className="flex items-center justify-between"><div><h2 className="text-[14px] font-bold">Kehadiran per rentang umur</h2><p className="mt-1 text-[10px] text-[#959c94]">Komposisi umur jamaah yang hadir.</p></div><span className="rounded-lg bg-[#f7f1e9] px-2 py-1 text-[9px] font-bold text-[#a06b4e]">USIA</span></div><div className="mt-4 h-[200px]">{stats.summary.total ? <ResponsiveContainer width="100%" height="100%"><BarChart data={stats.ages} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}><CartesianGrid stroke="#edf0e8" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 10, fill: "#869087" }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} tick={{ fontSize: 9, fill: "#9ba199" }} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: "#f3f5ed" }} contentStyle={{ borderRadius: 12, border: "1px solid #e8e8df", fontSize: 11 }} /><Bar dataKey="total" name="Jamaah" fill="#d48b68" radius={[6, 6, 0, 0]} maxBarSize={44} /></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-[11px] text-[#9ba198]">Belum ada data umur.</div>}</div></div>
     <div className="card mt-4 overflow-hidden">
       <div className="flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center sm:px-6"><div><h2 className="text-[14px] font-bold">Daftar hadir</h2><p className="mt-1 text-[10px] text-[#959c94]">{total ? `${money.format(total)} peserta terdaftar` : "Data peserta dari semua kegiatan."}{lastUpdated && <span> · Diperbarui {formatTime(lastUpdated.toISOString())}</span>}</p></div><div className="flex flex-wrap items-center gap-2"><form onSubmit={applySearch} className="relative"><Search size={14} className="absolute left-3 top-[12px] text-[#929a92]" /><input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} maxLength={100} placeholder="Cari nama, pekerjaan, desa..." aria-label="Cari nama, pekerjaan, desa, kelompok, atau kegiatan" className="h-9 w-[220px] rounded-xl border border-[#e5e6dc] bg-white pl-9 pr-3 text-[10px] outline-none focus:border-moss" /></form><a href={exportUrl} className="btn-secondary h-9"><ArrowDownToLine size={14} /> Ekspor CSV</a><a href={exportPdfUrl} target="_blank" rel="noreferrer" title="Cetak atau simpan sebagai PDF" className="btn-secondary h-9"><FileDown size={14} /> Ekspor PDF</a></div></div>
-      <div className="admin-scroll overflow-x-auto"><table className="w-full min-w-[1040px] border-collapse text-left"><thead><tr className="border-y border-[#eeeee7] bg-[#fbfbf8] text-[9px] font-bold uppercase tracking-[.1em] text-[#939b93]"><th className="px-6 py-3"><button onClick={() => changeSort("fullName")} className="flex items-center gap-1">Nama {sort === "fullName" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-4 py-3">Jenis kelamin</th><th className="px-4 py-3">Desa</th><th className="px-4 py-3">Kelompok asal</th><th className="px-4 py-3"><button onClick={() => changeSort("age")} className="flex items-center gap-1">Umur {sort === "age" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-4 py-3">Pekerjaan</th><th className="px-6 py-3"><button onClick={() => changeSort("createdAt")} className="flex items-center gap-1">Waktu absen {sort === "createdAt" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-5 py-3 text-right">Aksi</th></tr></thead><tbody>{tableLoading ? <tr><td colSpan={8} className="px-6 py-12 text-center text-[11px] text-[#9ca39b]">Memuat daftar hadir...</td></tr> : people.length ? people.map((person) => <tr key={person.id} className="border-b border-[#f0f0e9] text-[11px] last:border-0 hover:bg-[#fcfcf9]"><td className="px-6 py-3.5"><div className="font-bold text-ink">{person.fullName}</div><div className="mt-1 text-[9px] font-medium text-[#8b958d]">{person.eventLocation}</div></td><td className="px-4 py-3.5 text-[#748078]">{person.gender === "male" ? "Laki-laki" : person.gender === "female" ? "Perempuan" : "Belum diketahui"}</td><td className="px-4 py-3.5 text-[#748078]">{person.villageName}</td><td className="px-4 py-3.5 text-[#748078]">{person.groupName}</td><td className="px-4 py-3.5 text-[#748078]">{person.age} th</td><td className="px-4 py-3.5 text-[#748078]">{person.occupation}</td><td className="px-6 py-3.5 text-[#879089]">{formatDate(person.createdAt)} · {formatTime(person.createdAt)}</td><td className="px-5 py-3.5"><div className="flex justify-end gap-1"><button onClick={() => void openEdit(person)} aria-label={`Edit ${person.fullName}`} title="Edit peserta" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[#718078] hover:bg-[#f0f1ea]"><Edit3 size={13} /><span>Ubah</span></button><button onClick={() => void deleteAttendance(person)} disabled={deletingId === person.id} aria-label={`Hapus ${person.fullName}`} title="Hapus peserta" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[#ad7568] hover:bg-[#fff2ed] disabled:opacity-50"><Trash2 size={13} /><span>{deletingId === person.id ? "Menghapus" : "Hapus"}</span></button></div></td></tr>) : <tr><td colSpan={8} className="px-6 py-12 text-center"><div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f3eb] text-moss"><CalendarDays size={17} /></div><p className="mt-3 text-[11px] font-semibold text-[#7c877e]">Belum ada peserta untuk ditampilkan.</p><p className="mt-1 text-[10px] text-[#a0a69e]">Data hadir akan muncul setelah peserta mengisi formulir.</p></td></tr>}</tbody></table></div>
-      <div className="flex items-center justify-between border-t border-[#eeeee7] px-5 py-3 sm:px-6"><span className="text-[10px] text-[#929b93]">Halaman {pages ? page : 0} dari {pages}</span><div className="flex gap-1"><button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Halaman sebelumnya" className="btn-secondary h-8 w-8 px-0 disabled:opacity-40"><ChevronLeft size={14} /></button><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} aria-label="Halaman berikutnya" className="btn-secondary h-8 w-8 px-0 disabled:opacity-40"><ChevronRight size={14} /></button></div></div>
+      <div className="admin-scroll overflow-x-auto"><table className="w-full min-w-[1040px] border-collapse text-left"><thead><tr className="border-y border-[#eeeee7] bg-[#fbfbf8] text-[9px] font-bold uppercase tracking-[.1em] text-[#939b93]"><th className="px-6 py-3"><button onClick={() => changeSort("fullName")} className="flex items-center gap-1">Nama {sort === "fullName" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-4 py-3">Jenis kelamin</th><th className="px-4 py-3">Desa</th><th className="px-4 py-3">Kelompok asal</th><th className="px-4 py-3"><button onClick={() => changeSort("age")} className="flex items-center gap-1">Umur {sort === "age" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-4 py-3">Pekerjaan</th><th className="px-6 py-3"><button onClick={() => changeSort("createdAt")} className="flex items-center gap-1">Waktu absen {sort === "createdAt" && (direction === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}</button></th><th className="px-5 py-3 text-right">Aksi</th></tr></thead><tbody>{tableLoading ? <tr><td colSpan={8} className="px-6 py-12 text-center text-[11px] text-[#9ca39b]">Memuat daftar hadir...</td></tr> : people.length ? people.map((person) => <tr key={person.id} className="border-b border-[#f0f0e9] text-[11px] last:border-0 hover:bg-[#fcfcf9]"><td className="px-6 py-3.5"><div className="font-bold text-ink">{person.fullName}</div><div className="mt-1 text-[9px] font-medium text-[#8b958d]">{person.eventLocation}</div></td><td className="px-4 py-3.5 text-[#748078]">{person.gender === "male" ? "Laki-laki" : person.gender === "female" ? "Perempuan" : "Belum diketahui"}</td><td className="px-4 py-3.5 text-[#748078]">{person.villageName}</td><td className="px-4 py-3.5 text-[#748078]">{person.groupName}</td><td className="px-4 py-3.5 text-[#748078]">{person.age === null ? "—" : `${person.age} th`}</td><td className="px-4 py-3.5 text-[#748078]">{person.occupation}</td><td className="px-6 py-3.5 text-[#879089]">{formatDate(person.createdAt)} · {formatTime(person.createdAt)}</td><td className="px-5 py-3.5"><div className="flex justify-end gap-1"><button onClick={() => void openEdit(person)} aria-label={`Edit ${person.fullName}`} title="Edit peserta" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[#718078] hover:bg-[#f0f1ea]"><Edit3 size={13} /><span>Ubah</span></button><button onClick={() => void deleteAttendance(person)} disabled={deletingId === person.id} aria-label={`Hapus ${person.fullName}`} title="Hapus peserta" className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[#ad7568] hover:bg-[#fff2ed] disabled:opacity-50"><Trash2 size={13} /><span>{deletingId === person.id ? "Menghapus" : "Hapus"}</span></button></div></td></tr>) : <tr><td colSpan={8} className="px-6 py-12 text-center"><div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f3eb] text-moss"><CalendarDays size={17} /></div><p className="mt-3 text-[11px] font-semibold text-[#7c877e]">Belum ada peserta untuk ditampilkan.</p><p className="mt-1 text-[10px] text-[#a0a69e]">Data hadir akan muncul setelah peserta mengisi formulir.</p></td></tr>}</tbody></table></div>
+      <div className="flex items-center justify-between border-t border-[#eeeee7] px-5 py-3 sm:px-6"><span className="text-[10px] text-[#929b93]">Halaman {pages ? page : 0} dari {pages}</span><div className="flex gap-1"><button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Halaman sebelumnya" title="Halaman sebelumnya" className="btn-secondary h-9 w-9 px-0 text-[#40564c] disabled:opacity-40"><ArrowLeft size={17} strokeWidth={2.5} /></button><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} aria-label="Halaman berikutnya" title="Halaman berikutnya" className="btn-secondary h-9 w-9 px-0 text-[#40564c] disabled:opacity-40"><ArrowRight size={17} strokeWidth={2.5} /></button></div></div>
     </div>
     <div className="mt-4 flex items-center justify-center gap-2 text-[9px] text-[#a0a69e]"><RefreshCw size={11} /> Data diperbarui otomatis setiap 60 detik saat halaman aktif.</div>
+    {addingPerson && <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="attendance-add-title"><form onSubmit={saveNewAttendance} className="card max-h-[90vh] w-full max-w-[560px] overflow-y-auto p-6 sm:p-7"><div className="flex items-start justify-between"><div><div className="text-[9px] font-bold uppercase tracking-[.18em] text-moss">data peserta baru</div><h2 id="attendance-add-title" className="mt-2 text-[21px] font-bold">Tambah peserta</h2><p className="mt-1 text-[11px] text-[#89938b]">Kegiatan dibatasi sesuai rentang tanggal dan tempat dashboard.</p></div><button type="button" onClick={() => setAddingPerson(false)} aria-label="Tutup dialog" className="rounded-lg p-2 text-[#89938b] hover:bg-[#f1f2eb]"><X size={17} /></button></div>
+      {addOptionsLoading ? <p className="mt-6 flex items-center gap-2 text-[11px] text-[#89938b]"><LoaderCircle size={14} className="spin" /> Memuat pilihan kegiatan, desa, dan kelompok...</p> : <div className="mt-6 space-y-4">
+        <div><label className="field-label" htmlFor="add-event">Jenis kegiatan</label><select id="add-event" required className="input-field" value={addForm.eventId} onChange={(e) => setAddForm({ ...addForm, eventId: e.target.value, villageId: "", groupId: "" })}><option value="">Pilih kegiatan</option>{availableAddEvents.map((event) => <option key={event.id} value={event.id}>{event.name} · {event.eventDate} · {event.location}</option>)}</select>{!availableAddEvents.length && <p className="mt-1.5 text-[10px] text-[#a5523e]">Tidak ada kegiatan pada rentang tanggal dan tempat yang dipilih.</p>}</div>
+        <div><label className="field-label" htmlFor="add-full-name">Nama lengkap</label><input id="add-full-name" required minLength={3} maxLength={100} autoComplete="name" className="input-field" placeholder="Nama lengkap peserta" value={addForm.fullName} onChange={(e) => setAddForm({ ...addForm, fullName: e.target.value })} /></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="add-village">Desa</label><select id="add-village" required className="input-field" value={addForm.villageId} disabled={!selectedAddEvent} onChange={(e) => setAddForm({ ...addForm, villageId: e.target.value, groupId: "" })}><option value="">Pilih desa</option>{addEventVillages.map((village) => <option key={village.id} value={village.id}>{village.name}{village.isActive ? "" : " · nonaktif"}</option>)}</select></div><div><label className="field-label" htmlFor="add-group">Kelompok</label><select id="add-group" required className="input-field" value={addForm.groupId} disabled={!addForm.villageId} onChange={(e) => setAddForm({ ...addForm, groupId: e.target.value })}><option value="">Pilih kelompok</option>{groups.filter((group) => group.villageId === Number(addForm.villageId)).map((group) => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " · nonaktif"}</option>)}</select></div></div>
+        <div><label className="field-label" htmlFor="add-occupation">Pekerjaan</label><input id="add-occupation" required maxLength={100} className="input-field" placeholder="Pekerjaan peserta" value={addForm.occupation} onChange={(e) => setAddForm({ ...addForm, occupation: e.target.value })} /></div>
+        <div><label className="field-label" htmlFor="add-notes">Keterangan tambahan <span className="field-hint">opsional</span></label><textarea id="add-notes" maxLength={1000} rows={3} className="input-field input-area" placeholder="Catatan tambahan tentang peserta" value={addForm.additionalNotes} onChange={(e) => setAddForm({ ...addForm, additionalNotes: e.target.value })} /></div>
+      </div>}
+      {addError && <p role="alert" className="mt-4 rounded-xl bg-[#fff3ef] px-3 py-2 text-[11px] text-[#a5523e]">{addError}</p>}
+      <div className="mt-7 flex justify-end gap-2 border-t border-[#efefe8] pt-4"><button type="button" onClick={() => setAddingPerson(false)} className="btn-secondary">Batal</button><button type="submit" disabled={addBusy || addOptionsLoading || !availableAddEvents.length} className="btn-primary min-h-10">{addBusy ? <><LoaderCircle size={14} className="spin" /> Menyimpan...</> : "Simpan peserta"}</button></div>
+    </form></div>}
     {editingPerson && <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="attendance-edit-title"><form onSubmit={saveAttendance} className="card max-h-[90vh] w-full max-w-[520px] overflow-y-auto p-6 sm:p-7"><div className="flex items-start justify-between"><div><div className="text-[9px] font-bold uppercase tracking-[.18em] text-moss">perbarui data</div><h2 id="attendance-edit-title" className="mt-2 text-[21px] font-bold">Ubah peserta</h2></div><button type="button" onClick={() => setEditingPerson(null)} aria-label="Tutup dialog" className="rounded-lg p-2 text-[#89938b] hover:bg-[#f1f2eb]"><X size={17} /></button></div>
       <div className="mt-6 space-y-4"><div><label className="field-label" htmlFor="edit-full-name">Nama lengkap</label><input id="edit-full-name" autoFocus required minLength={3} maxLength={100} className="input-field" value={editForm.fullName} onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })} /></div>
-        <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="edit-gender">Jenis kelamin</label><select id="edit-gender" className="input-field" value={editForm.gender} onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as Person["gender"] })}><option value="male">Laki-laki</option><option value="female">Perempuan</option><option value="unknown">Belum diketahui</option></select></div><div><label className="field-label" htmlFor="edit-age">Umur</label><input id="edit-age" type="number" required min={5} max={100} className="input-field" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} /></div></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="edit-gender">Jenis kelamin</label><select id="edit-gender" className="input-field" value={editForm.gender} onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as Person["gender"] })}><option value="male">Laki-laki</option><option value="female">Perempuan</option><option value="unknown">Belum diketahui</option></select></div><div><label className="field-label" htmlFor="edit-age">Umur <span className="field-hint">opsional</span></label><input id="edit-age" type="number" min={5} max={100} className="input-field" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} /></div></div>
         <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="edit-village">Desa</label><select id="edit-village" required className="input-field" value={editForm.villageId} disabled={editOptionsLoading} onChange={(e) => setEditForm({ ...editForm, villageId: e.target.value, groupId: "" })}><option value="">Pilih desa</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}{village.isActive ? "" : " · nonaktif"}</option>)}</select></div><div><label className="field-label" htmlFor="edit-group">Kelompok asal</label><select id="edit-group" required className="input-field" value={editForm.groupId} disabled={editOptionsLoading || !editForm.villageId} onChange={(e) => setEditForm({ ...editForm, groupId: e.target.value })}><option value="">Pilih kelompok</option>{groups.filter((group) => group.villageId === Number(editForm.villageId)).map((group) => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " · nonaktif"}</option>)}</select></div></div>
         <div><label className="field-label" htmlFor="edit-occupation">Pekerjaan</label><input id="edit-occupation" required maxLength={100} className="input-field" value={editForm.occupation} onChange={(e) => setEditForm({ ...editForm, occupation: e.target.value })} /></div>
         <div><label className="field-label" htmlFor="edit-created-at">Waktu absen</label><input id="edit-created-at" type="datetime-local" required className="input-field" value={editForm.createdAt} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value })} /></div>

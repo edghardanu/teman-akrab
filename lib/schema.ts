@@ -46,9 +46,10 @@ export const attendances = sqliteTable("attendances", {
   normalizedFullName: text("normalized_full_name").notNull().default(""),
   villageId: integer("village_id").notNull().references(() => villages.id),
   groupId: integer("group_id").notNull().references(() => groups.id),
-  age: integer("age").notNull(),
+  age: integer("age"),
   gender: text("gender", { enum: ["male", "female", "unknown"] }).notNull().default("unknown"),
   occupation: text("occupation").notNull(),
+  additionalNotes: text("additional_notes"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
   uniqueAttendance: uniqueIndex("attendances_no_duplicates").on(table.eventId, table.normalizedFullName, table.villageId, table.groupId),

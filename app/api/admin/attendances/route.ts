@@ -1,10 +1,24 @@
 import { and, asc, count, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { jsonError } from "@/lib/api";
-import { requireAdmin } from "@/lib/auth";
+import { isUniqueError, jsonError } from "@/lib/api";
+import { requireAdmin, sameOrigin } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { jakartaDateBound } from "@/lib/dates";
-import { attendances, events, groups, villages } from "@/lib/schema";
+import { attendances, eventVillages, events, groups, villages } from "@/lib/schema";
+import { normalizePersonName } from "@/lib/name-normalization";
+import { z } from "zod";
+
+const adminCreateAttendanceSchema = z.object({
+  eventId: z.coerce.number().int().positive(),
+  fullName: z.string().trim().min(3, "Nama minimal 3 karakter.").max(100, "Nama maksimal 100 karakter."),
+  villageId: z.coerce.number().int().positive("Pilih desa terlebih dahulu."),
+  groupId: z.coerce.number().int().positive("Pilih kelompok terlebih dahulu."),
+  occupation: z.string().trim().min(1, "Pekerjaan wajib diisi.").max(100, "Pekerjaan maksimal 100 karakter."),
+  additionalNotes: z.string().trim().max(1000, "Keterangan tambahan maksimal 1000 karakter.").optional().default(""),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Rentang tanggal tidak valid."),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Rentang tanggal tidak valid."),
+  location: z.string().min(1),
+});
 
 export async function GET(request: NextRequest) {
   if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
@@ -49,8 +63,53 @@ export async function GET(request: NextRequest) {
   const total = totalRow?.value ?? 0;
   const orderColumn = sortBy === "fullName" ? attendances.fullName : sortBy === "age" ? attendances.age : attendances.createdAt;
   const ordered = sortDirection === "asc" ? asc(orderColumn) : desc(orderColumn);
-  const rows = await db.select({ id: attendances.id, eventId: attendances.eventId, eventLocation: events.location, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, createdAt: attendances.createdAt, villageId: attendances.villageId, groupId: attendances.groupId, villageName: villages.name, groupName: groups.name })
+  const rows = await db.select({ id: attendances.id, eventId: attendances.eventId, eventLocation: events.location, fullName: attendances.fullName, age: attendances.age, gender: attendances.gender, occupation: attendances.occupation, additionalNotes: attendances.additionalNotes, createdAt: attendances.createdAt, villageId: attendances.villageId, groupId: attendances.groupId, villageName: villages.name, groupName: groups.name })
     .from(attendances).innerJoin(events, eq(attendances.eventId, events.id)).innerJoin(villages, eq(attendances.villageId, villages.id)).innerJoin(groups, eq(attendances.groupId, groups.id))
     .where(where).orderBy(ordered, asc(attendances.fullName)).limit(pageSize).offset((page - 1) * pageSize);
   return NextResponse.json({ attendances: rows, total, page, pages: Math.ceil(total / pageSize) });
+}
+
+export async function POST(request: NextRequest) {
+  if (!sameOrigin(request)) return jsonError("Permintaan tidak valid.", 403);
+  if (!await requireAdmin(request)) return jsonError("Silakan masuk kembali.", 401);
+
+  const parsed = adminCreateAttendanceSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Periksa kembali data peserta.");
+  const { from, to, location, ...form } = parsed.data;
+  if (from > to) return jsonError("Tanggal awal tidak boleh melewati tanggal akhir.");
+
+  const db = getDb();
+  const [event] = await db.select({
+    id: events.id,
+    eventDate: events.eventDate,
+    eventTime: events.eventTime,
+    location: events.location,
+  }).from(events).where(eq(events.id, form.eventId)).limit(1);
+  if (!event || event.eventDate < from || event.eventDate > to || (location !== "all" && event.location !== location)) {
+    return jsonError("Kegiatan tidak sesuai dengan filter tanggal dan tempat yang dipilih.");
+  }
+
+  const [participatingVillage] = await db.select({ villageId: eventVillages.villageId }).from(eventVillages)
+    .where(and(eq(eventVillages.eventId, event.id), eq(eventVillages.villageId, form.villageId))).limit(1);
+  const [village] = await db.select({ id: villages.id }).from(villages).where(eq(villages.id, form.villageId)).limit(1);
+  const [group] = await db.select({ id: groups.id, villageId: groups.villageId }).from(groups).where(eq(groups.id, form.groupId)).limit(1);
+  if (!participatingVillage || !village || !group || group.villageId !== village.id) {
+    return jsonError("Desa dan kelompok yang dipilih tidak sesuai dengan kegiatan.");
+  }
+
+  try {
+    const createdAt = new Date(`${event.eventDate}T${event.eventTime}:00+07:00`).toISOString().replace("T", " ").slice(0, 19);
+    const [attendance] = await db.insert(attendances).values({
+      ...form,
+      age: null,
+      gender: "unknown",
+      additionalNotes: form.additionalNotes || null,
+      normalizedFullName: normalizePersonName(form.fullName),
+      createdAt,
+    }).returning({ id: attendances.id });
+    return NextResponse.json({ success: true, id: attendance.id }, { status: 201 });
+  } catch (error) {
+    if (isUniqueError(error)) return jsonError("Peserta dengan nama, desa, kelompok, dan kegiatan tersebut sudah tercatat.", 409);
+    throw error;
+  }
 }

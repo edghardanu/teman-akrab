@@ -8,7 +8,7 @@ import { normalizePersonName } from "@/lib/name-normalization";
 
 type Params = { params: Promise<{ id: string }> };
 type Gender = "male" | "female" | "unknown";
-type Person = { id: number; fullName: string; villageId: number; villageName: string; groupName: string; age: number; gender: Gender; occupation: string };
+type Person = { id: number; fullName: string; villageId: number; villageName: string; groupName: string; age: number | null; gender: Gender; occupation: string };
 type PreviewGroup = { name: string; villageId: number | null; villageName: string | null; members: Omit<Person, "villageId">[] };
 
 function randomIndex(max: number) {
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       if (seenNames.has(normalizedName)) { duplicateNameCount++; return; }
       seenNames.add(normalizedName);
       if (row.villageId && row.villageName) result.get(row.groupId)!.villages.set(row.villageId, row.villageName);
-      result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age!, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
+      result.get(row.groupId)!.members.push({ id: row.attendanceId, fullName: row.fullName, age: row.age, gender: row.gender ?? "unknown", occupation: row.occupation!, villageName: row.villageName ?? "", groupName: row.groupName ?? "" });
     }
   });
   const savedGroups: PreviewGroup[] = [...result.values()].map(({ name, members, villages: groupVillages }) => {

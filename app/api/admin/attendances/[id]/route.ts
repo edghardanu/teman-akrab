@@ -23,7 +23,7 @@ const adminAttendanceSchema = z.object({
   fullName: z.string().trim().min(3, "Nama minimal 3 karakter.").max(100, "Nama maksimal 100 karakter."),
   villageId: z.coerce.number().int().positive("Pilih desa terlebih dahulu."),
   groupId: z.coerce.number().int().positive("Pilih kelompok terlebih dahulu."),
-  age: z.coerce.number().int().min(5, "Umur minimal 5 tahun.").max(100, "Umur maksimal 100 tahun."),
+  age: z.preprocess((value) => value === "" || value === null ? null : value, z.coerce.number().int().min(5, "Umur minimal 5 tahun.").max(100, "Umur maksimal 100 tahun.").nullable()),
   gender: z.enum(["male", "female", "unknown"]),
   occupation: z.string().trim().min(1, "Pekerjaan wajib diisi.").max(100, "Pekerjaan maksimal 100 karakter."),
   createdAt: z.string().refine(isValidJakartaDateTime, "Waktu absen tidak valid."),

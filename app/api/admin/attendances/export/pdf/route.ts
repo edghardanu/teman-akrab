@@ -71,9 +71,12 @@ export async function GET(request: NextRequest) {
     ? []
     : await db.select({ name: villages.name }).from(villages).where(eq(villages.id, villageId)).limit(1);
   const rows = await db.select({
+    eventName: events.name,
     fullName: attendances.fullName,
     villageName: villages.name,
     groupName: groups.name,
+    occupation: attendances.occupation,
+    additionalNotes: attendances.additionalNotes,
     createdAt: attendances.createdAt,
   }).from(attendances)
     .innerJoin(events, eq(attendances.eventId, events.id))
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
     `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
   ).join("");
   const rowsMarkup = rows.map((row) =>
-    `<tr><td>${escapeHtml(row.fullName)}</td><td>${escapeHtml(row.villageName)}</td><td>${escapeHtml(row.groupName)}</td><td>${escapeHtml(formatAttendanceTime(row.createdAt))}</td></tr>`,
+    `<tr><td>${escapeHtml(row.eventName)}</td><td>${escapeHtml(row.fullName)}</td><td>${escapeHtml(row.villageName)}</td><td>${escapeHtml(row.groupName)}</td><td>${escapeHtml(row.occupation)}</td><td>${escapeHtml(row.additionalNotes || "—")}</td><td>${escapeHtml(formatAttendanceTime(row.createdAt))}</td></tr>`,
   ).join("");
   const html = `<!doctype html>
 <html lang="id">
@@ -112,12 +115,12 @@ export async function GET(request: NextRequest) {
     .filters span { color: #7b887f; font-size: 10px; }
     .filters strong { font-size: 11px; font-weight: 600; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { border-bottom: 1px solid #e8ebe6; padding: 9px 10px; text-align: left; }
+    th, td { border-bottom: 1px solid #e8ebe6; padding: 7px 8px; text-align: left; }
     th { background: #f4f6f1; color: #56675d; font-size: 10px; text-transform: uppercase; }
-    td { font-size: 11px; }
+    td { font-size: 10px; }
     tfoot td { background: #f4f6f1; border-top: 1px solid #dce3dc; font-weight: 700; }
     .generated { color: #89948c; font-size: 10px; margin-top: 16px; }
-    @page { size: A4 portrait; margin: 14mm; }
+    @page { size: A4 landscape; margin: 14mm; }
     @media print {
       body { margin: 0; max-width: none; padding: 0; }
       thead { display: table-header-group; }
@@ -131,9 +134,9 @@ export async function GET(request: NextRequest) {
   <p class="subtitle">Teman Akrab · Daftar peserta berdasarkan filter yang dipilih</p>
   <section class="filters">${filterMarkup}</section>
   <table>
-    <thead><tr><th>Nama pengguna</th><th>Desa</th><th>Kelompok</th><th>Waktu absen</th></tr></thead>
-    <tbody>${rowsMarkup || '<tr><td colspan="4">Tidak ada data kehadiran untuk filter ini.</td></tr>'}</tbody>
-    <tfoot><tr><td colspan="3">Total peserta</td><td>${rows.length.toLocaleString("id-ID")}</td></tr></tfoot>
+    <thead><tr><th>Kegiatan</th><th>Nama peserta</th><th>Desa</th><th>Kelompok</th><th>Pekerjaan</th><th>Keterangan tambahan</th><th>Waktu absen</th></tr></thead>
+    <tbody>${rowsMarkup || '<tr><td colspan="7">Tidak ada data kehadiran untuk filter ini.</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="6">Total peserta</td><td>${rows.length.toLocaleString("id-ID")}</td></tr></tfoot>
   </table>
   <p class="generated">Dicetak pada ${escapeHtml(formatAttendanceTime(new Date().toISOString()))}</p>
   <script>window.addEventListener("load", () => window.print());</script>

@@ -7,7 +7,7 @@ import { safeJson } from "@/components/api-json";
 import { normalizePersonName } from "@/lib/name-normalization";
 
 type Gender = "male" | "female" | "unknown";
-type Member = { id: number; fullName: string; age: number; gender: Gender; occupation: string; villageName: string; groupName: string };
+type Member = { id: number; fullName: string; age: number | null; gender: Gender; occupation: string; villageName: string; groupName: string };
 type Team = { name: string; villageId: number | null; villageName: string | null; members: Member[] };
 type EventData = { id: number; name: string; eventDate: string; eventTime: string; location: string; status: string };
 
@@ -205,7 +205,7 @@ export function ShuffleView({ eventId }: { eventId: number }) {
           </div>
           <p className="mt-2 text-[9px] font-semibold text-[#758078]">Laki-laki {genderCount(team, "male")} · Perempuan {genderCount(team, "female")}{genderCount(team, "unknown") > 0 && ` · Belum diketahui ${genderCount(team, "unknown")}`}</p>
         </div>
-        <div className="divide-y divide-[#f0f0e9]">{team.members.map((person, memberIndex) => <div key={person.id} className="flex items-start gap-3 px-5 py-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#f0f1ea] text-[9px] font-bold text-[#718075]">{memberIndex + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-bold">{person.fullName}</p><p className="mt-1 truncate text-[9px] text-[#89938b]">{genderLabel(person.gender)} · {person.villageName} · {person.groupName}</p></div><span className="shrink-0 text-[9px] text-[#929b92]">{person.age} th</span></div>)}</div>
+        <div className="divide-y divide-[#f0f0e9]">{team.members.map((person, memberIndex) => <div key={person.id} className="flex items-start gap-3 px-5 py-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#f0f1ea] text-[9px] font-bold text-[#718075]">{memberIndex + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-bold">{person.fullName}</p><p className="mt-1 truncate text-[9px] text-[#89938b]">{genderLabel(person.gender)} · {person.villageName} · {person.groupName}</p></div><span className="shrink-0 text-[9px] text-[#929b92]">{person.age === null ? "Umur —" : `${person.age} th`}</span></div>)}</div>
       </section>)}
     </div> : <div className="card flex flex-col items-center px-6 py-14 text-center"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#edf1e4] text-forest"><Shuffle size={20} /></div><h2 className="mt-4 text-[14px] font-bold">Belum ada pembagian</h2><p className="mt-2 max-w-sm text-[11px] leading-5 text-[#909890]">Masukkan jumlah kelompok lalu buat pratinjau dari jamaah yang tercatat hadir.</p><a href="/admin/dashboard" className="btn-secondary mt-5">Lihat daftar hadir <ArrowRight size={13} /></a></div>}
 
