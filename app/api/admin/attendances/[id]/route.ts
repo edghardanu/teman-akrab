@@ -26,6 +26,7 @@ const adminAttendanceSchema = z.object({
   age: z.preprocess((value) => value === "" || value === null ? null : value, z.coerce.number().int().min(5, "Umur minimal 5 tahun.").max(100, "Umur maksimal 100 tahun.").nullable()),
   gender: z.enum(["male", "female", "unknown"]),
   occupation: z.string().trim().min(1, "Pekerjaan wajib diisi.").max(100, "Pekerjaan maksimal 100 karakter."),
+  additionalNotes: z.string().trim().max(1000, "Keterangan tambahan maksimal 1000 karakter.").optional().default(""),
   createdAt: z.string().refine(isValidJakartaDateTime, "Waktu absen tidak valid."),
 });
 
@@ -48,6 +49,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const createdAt = new Date(`${parsed.data.createdAt}:00+07:00`).toISOString().replace("T", " ").slice(0, 19);
     const [attendance] = await db.update(attendances).set({
       ...parsed.data,
+      additionalNotes: parsed.data.additionalNotes || null,
       normalizedFullName: normalizePersonName(parsed.data.fullName),
       createdAt,
     }).where(eq(attendances.id, id)).returning({ id: attendances.id });

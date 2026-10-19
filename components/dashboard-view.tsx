@@ -11,7 +11,7 @@ type Stats = { event?: { id: number; name: string; status: string } | null; even
 type Person = { id: number; eventId: number; eventLocation: string; fullName: string; villageId: number; villageName: string; groupId: number; groupName: string; age: number | null; gender: "male" | "female" | "unknown"; occupation: string; additionalNotes: string | null; createdAt: string };
 type VillageOption = { id: number; name: string; isActive: boolean };
 type GroupOption = { id: number; name: string; villageId: number; isActive: boolean };
-type AttendanceForm = { fullName: string; villageId: string; groupId: string; age: string; gender: Person["gender"]; occupation: string; createdAt: string };
+type AttendanceForm = { fullName: string; villageId: string; groupId: string; age: string; gender: Person["gender"]; occupation: string; additionalNotes: string; createdAt: string };
 type AdminEventOption = EventOption & { villageIds: number[] };
 type NewAttendanceForm = { eventId: string; fullName: string; villageId: string; groupId: string; occupation: string; additionalNotes: string };
 
@@ -49,7 +49,7 @@ export function DashboardView() {
   const [villages, setVillages] = useState<VillageOption[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
-  const [editForm, setEditForm] = useState<AttendanceForm>({ fullName: "", villageId: "", groupId: "", age: "", gender: "unknown", occupation: "", createdAt: "" });
+  const [editForm, setEditForm] = useState<AttendanceForm>({ fullName: "", villageId: "", groupId: "", age: "", gender: "unknown", occupation: "", additionalNotes: "", createdAt: "" });
   const [editOptionsLoading, setEditOptionsLoading] = useState(false);
   const [addingPerson, setAddingPerson] = useState(false);
   const [addForm, setAddForm] = useState<NewAttendanceForm>({ eventId: "", fullName: "", villageId: "", groupId: "", occupation: "", additionalNotes: "" });
@@ -140,7 +140,7 @@ export function DashboardView() {
 
   const openEdit = async (person: Person) => {
     setEditingPerson(person);
-    setEditForm({ fullName: person.fullName, villageId: String(person.villageId), groupId: String(person.groupId), age: String(person.age ?? ""), gender: person.gender, occupation: person.occupation, createdAt: localDateTimeValue(person.createdAt) });
+    setEditForm({ fullName: person.fullName, villageId: String(person.villageId), groupId: String(person.groupId), age: String(person.age ?? ""), gender: person.gender, occupation: person.occupation, additionalNotes: person.additionalNotes ?? "", createdAt: localDateTimeValue(person.createdAt) });
     setEditError("");
     if (villages.length && groups.length) return;
     setEditOptionsLoading(true);
@@ -352,6 +352,7 @@ export function DashboardView() {
         <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="edit-gender">Jenis kelamin</label><select id="edit-gender" className="input-field" value={editForm.gender} onChange={(e) => setEditForm({ ...editForm, gender: e.target.value as Person["gender"] })}><option value="male">Laki-laki</option><option value="female">Perempuan</option><option value="unknown">Belum diketahui</option></select></div><div><label className="field-label" htmlFor="edit-age">Umur <span className="field-hint">opsional</span></label><input id="edit-age" type="number" min={5} max={100} className="input-field" value={editForm.age} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} /></div></div>
         <div className="grid gap-4 sm:grid-cols-2"><div><label className="field-label" htmlFor="edit-village">Desa</label><select id="edit-village" required className="input-field" value={editForm.villageId} disabled={editOptionsLoading} onChange={(e) => setEditForm({ ...editForm, villageId: e.target.value, groupId: "" })}><option value="">Pilih desa</option>{villages.map((village) => <option key={village.id} value={village.id}>{village.name}{village.isActive ? "" : " · nonaktif"}</option>)}</select></div><div><label className="field-label" htmlFor="edit-group">Kelompok asal</label><select id="edit-group" required className="input-field" value={editForm.groupId} disabled={editOptionsLoading || !editForm.villageId} onChange={(e) => setEditForm({ ...editForm, groupId: e.target.value })}><option value="">Pilih kelompok</option>{groups.filter((group) => group.villageId === Number(editForm.villageId)).map((group) => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " · nonaktif"}</option>)}</select></div></div>
         <div><label className="field-label" htmlFor="edit-occupation">Pekerjaan</label><input id="edit-occupation" required maxLength={100} className="input-field" value={editForm.occupation} onChange={(e) => setEditForm({ ...editForm, occupation: e.target.value })} /></div>
+        <div><label className="field-label" htmlFor="edit-additional-notes">Keterangan tambahan <span className="field-hint">opsional</span></label><textarea id="edit-additional-notes" maxLength={1000} rows={3} className="input-field input-area" placeholder="Catatan tambahan tentang peserta" value={editForm.additionalNotes} onChange={(e) => setEditForm({ ...editForm, additionalNotes: e.target.value })} /></div>
         <div><label className="field-label" htmlFor="edit-created-at">Waktu absen</label><input id="edit-created-at" type="datetime-local" required className="input-field" value={editForm.createdAt} onChange={(e) => setEditForm({ ...editForm, createdAt: e.target.value })} /></div>
       </div>
       {editOptionsLoading && <p className="mt-4 flex items-center gap-2 text-[11px] text-[#89938b]"><LoaderCircle size={14} className="spin" /> Memuat pilihan desa dan kelompok...</p>}
