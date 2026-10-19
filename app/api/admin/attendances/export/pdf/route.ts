@@ -83,7 +83,6 @@ export async function GET(request: NextRequest) {
     fullName: attendances.fullName,
     villageName: villages.name,
     groupName: groups.name,
-    occupation: attendances.occupation,
     additionalNotes: attendances.additionalNotes,
     createdAt: attendances.createdAt,
   }).from(attendances)
@@ -105,7 +104,7 @@ export async function GET(request: NextRequest) {
     `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`,
   ).join("");
   const rowsMarkup = rows.map((row) =>
-    `<tr><td>${escapeHtml(row.eventName)}</td><td>${escapeHtml(row.fullName)}</td><td>${escapeHtml(row.villageName)}</td><td>${escapeHtml(row.groupName)}</td><td>${escapeHtml(row.occupation)}</td><td>${escapeHtml(row.additionalNotes || "—")}</td><td>${escapeHtml(formatAttendanceTime(row.createdAt))}</td></tr>`,
+    `<tr><td>${escapeHtml(row.eventName)}</td><td>${escapeHtml(row.fullName)}</td><td>${escapeHtml(row.villageName)}</td><td>${escapeHtml(row.groupName)}</td><td>${escapeHtml(row.additionalNotes || "—")}</td><td>${escapeHtml(formatAttendanceTime(row.createdAt))}</td></tr>`,
   ).join("");
   const html = `<!doctype html>
 <html lang="id">
@@ -142,9 +141,9 @@ export async function GET(request: NextRequest) {
   <p class="subtitle">Teman Akrab · Daftar peserta berdasarkan filter yang dipilih</p>
   <section class="filters">${filterMarkup}</section>
   <table>
-    <thead><tr><th>Kegiatan</th><th>Nama peserta</th><th>Desa</th><th>Kelompok</th><th>Pekerjaan</th><th>Keterangan tambahan</th><th>Waktu absen</th></tr></thead>
-    <tbody>${rowsMarkup || '<tr><td colspan="7">Tidak ada data kehadiran untuk filter ini.</td></tr>'}</tbody>
-    <tfoot><tr><td colspan="6">Total peserta</td><td>${rows.length.toLocaleString("id-ID")}</td></tr></tfoot>
+    <thead><tr><th>Kegiatan</th><th>Nama peserta</th><th>Desa</th><th>Kelompok</th><th>Keterangan tambahan</th><th>Waktu absen</th></tr></thead>
+    <tbody>${rowsMarkup || '<tr><td colspan="6">Tidak ada data kehadiran untuk filter ini.</td></tr>'}</tbody>
+    <tfoot><tr><td colspan="5">Total peserta</td><td>${rows.length.toLocaleString("id-ID")}</td></tr></tfoot>
   </table>
   <p class="generated">Dicetak pada ${escapeHtml(formatAttendanceTime(new Date().toISOString()))}</p>
   <script>window.addEventListener("load", () => window.print());</script>
