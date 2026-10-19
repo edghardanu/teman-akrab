@@ -22,7 +22,7 @@ const money = new Intl.NumberFormat("id-ID");
 
 function attendanceDate(date: string) { return new Date(date.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(date) ? date : `${date.replace(" ", "T")}Z`); }
 function formatDate(date: string) { return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" }).format(attendanceDate(date)); }
-function formatTime(date: string) { return new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(attendanceDate(date)); }
+function formatTime(date: string) { return new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Jakarta" }).format(attendanceDate(date)); }
 function localDateTimeValue(date: string) { return new Date(attendanceDate(date).getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 16); }
 
 export function DashboardView() {
