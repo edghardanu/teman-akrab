@@ -18,15 +18,22 @@ function escapeHtml(value: unknown) {
 
 function formatAttendanceTime(value: string) {
   const date = new Date(value.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value.replace(" ", "T")}Z`);
-  return new Intl.DateTimeFormat("id-ID", {
+  const dateLabel = new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(date);
+  const timeParts = new Intl.DateTimeFormat("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
     timeZone: "Asia/Jakarta",
-  }).format(date);
+  }).formatToParts(date);
+  const hour = timeParts.find((part) => part.type === "hour")?.value;
+  const minute = timeParts.find((part) => part.type === "minute")?.value;
+  if (!hour || !minute) throw new Error("Waktu kehadiran tidak dapat diformat.");
+  return `${dateLabel} pukul ${hour}:${minute}`;
 }
 
 export async function GET(request: NextRequest) {
